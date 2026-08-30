@@ -24,7 +24,14 @@ func main() {
 
 	golog.Info("MIDIBridge Client " + version + " starting...")
 
-	configPath := filepath.Join(".", "data", "config.json")
+	// 配置文件锚定到可执行文件所在目录，避免"从其他目录启动时
+	// 读到/生成另一份配置"以及工作目录被诱导劫持配置来源。
+	// 无法解析可执行文件路径时回退为当前目录（保持旧行为）。
+	configDir := "."
+	if exePath, err := os.Executable(); err == nil {
+		configDir = filepath.Dir(exePath)
+	}
+	configPath := filepath.Join(configDir, "data", "config.json")
 	cfg, err := loadConfig(configPath)
 	if err != nil {
 		golog.Error("Startup failed: " + err.Error())
