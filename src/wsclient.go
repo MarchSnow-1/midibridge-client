@@ -1,14 +1,17 @@
 package main
 
 import (
-	golog "github.com/donnie4w/go-logger/logger"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
 	"sync"
 	"time"
 
+	golog "github.com/donnie4w/go-logger/logger"
 	"github.com/gorilla/websocket"
 )
 
@@ -54,6 +57,7 @@ type WSClient struct {
 	port     int
 	password string
 	rc       ReconnectConfig
+	tlsCfg   TLSConfig
 
 	state          clientState
 	conn           *websocket.Conn
@@ -76,13 +80,48 @@ func NewWSClient() *WSClient {
 	}
 }
 
-func (w *WSClient) Connect(host string, port int, password string, rc ReconnectConfig) {
+func (w *WSClient) Connect(host string, port int, password string, rc ReconnectConfig, tlsCfg TLSConfig) {
 	w.host = host
 	w.port = port
 	w.password = password
 	w.rc = rc
+	w.tlsCfg = tlsCfg
 	w.state = stateIdle
 	go w.connectLoop()
+}
+
+// buildDialer 构造 WebSocket 拨号器。
+// TLS 启用时使用 wss:// 并校验服务端证书；配置了 CACert 时额外信任该
+// 证书（自签场景）。握手超时防止恶意/无响应对端长期挂起拨号。
+func (w *WSClient) buildDialer() (*websocket.Dialer, error) {
+	d := &websocket.Dialer{
+		HandshakeTimeout: 15 * time.Second,
+	}
+	if w.tlsCfg.Enabled {
+		tlsConf := &tls.Config{MinVersion: tls.VersionTLS12}
+		if w.tlsCfg.CACert != "" {
+			pem, err := os.ReadFile(w.tlsCfg.CACert)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read tls.caCert %s: %w", w.tlsCfg.CACert, err)
+			}
+			pool := x509.NewCertPool()
+			if !pool.AppendCertsFromPEM(pem) {
+				return nil, fmt.Errorf("tls.caCert %s contains no valid PEM certificate", w.tlsCfg.CACert)
+			}
+			tlsConf.RootCAs = pool
+		}
+		d.TLSClientConfig = tlsConf
+	}
+	return d, nil
+}
+
+// dialURL 按 TLS 配置返回 ws:// 或 wss:// 连接地址。
+func (w *WSClient) dialURL() string {
+	scheme := "ws"
+	if w.tlsCfg.Enabled {
+		scheme = "wss"
+	}
+	return fmt.Sprintf("%s://%s:%d", scheme, w.host, w.port)
 }
 
 func (w *WSClient) Disconnect() {
@@ -117,7 +156,7 @@ func (w *WSClient) connectLoop() {
 			return
 		}
 
-		url := fmt.Sprintf("ws://%s:%d", w.host, w.port)
+		url := w.dialURL()
 		if firstDial {
 			w.setState(stateConnecting)
 			golog.Info(T("wsClient.connecting", map[string]string{"url": url}))
@@ -125,7 +164,21 @@ func (w *WSClient) connectLoop() {
 			w.setState(stateConnecting)
 		}
 
-		conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+		dialer, err := w.buildDialer()
+		if err != nil {
+			golog.Error(T("wsClient.connectingFailed", map[string]string{"url": url, "error": err.Error()}))
+			if !w.rc.Enabled {
+				w.setState(stateFailed)
+				return
+			}
+			w.reconnectWait()
+			if w.isStopped() {
+				return
+			}
+			continue
+		}
+
+		conn, _, err := dialer.Dial(url, nil)
 		if err != nil {
 			golog.Error(T("wsClient.connectingFailed", map[string]string{"url": url, "error": err.Error()}))
 			if !w.rc.Enabled {

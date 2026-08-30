@@ -16,6 +16,7 @@ type ClientConfig struct {
 	MIDI      MIDIConfig      `json:"midi"`
 	Reconnect ReconnectConfig `json:"reconnect"`
 	Logging   LoggingConfig   `json:"logging"`
+	TLS       TLSConfig       `json:"tls"`
 }
 
 type ServerConfig struct {
@@ -25,6 +26,13 @@ type ServerConfig struct {
 
 type AuthConfig struct {
 	Password string `json:"password"`
+}
+
+// TLSConfig TLS 连接配置。启用后使用 wss:// 加密连接；
+// 服务端为自签证书时，通过 CACert 指定其证书（或其 CA）以完成信任。
+type TLSConfig struct {
+	Enabled bool   `json:"enabled"` // 是否启用 TLS（wss://）
+	CACert  string `json:"caCert"`  // 信任的证书文件路径（PEM），用于自签证书
 }
 
 type MIDIConfig struct {
@@ -65,6 +73,10 @@ func defaultConfig() ClientConfig {
 		Logging: LoggingConfig{
 			File:        false,
 			MidiVerbose: false,
+		},
+		TLS: TLSConfig{
+			Enabled: false,
+			CACert:  "",
 		},
 	}
 }
@@ -131,6 +143,9 @@ func mergeFile(dst, src *ClientConfig, rawKeys map[string]json.RawMessage) {
 	}
 	if _, ok := rawKeys["logging"]; ok {
 		dst.Logging = src.Logging
+	}
+	if _, ok := rawKeys["tls"]; ok {
+		dst.TLS = src.TLS
 	}
 }
 
