@@ -116,6 +116,17 @@ func loadConfig(configPath string) (*ClientConfig, error) {
 	flag.StringVar(&cfg.MIDI.VirtualPortName, "port-name", cfg.MIDI.VirtualPortName, "Virtual MIDI port name")
 	flag.Parse()
 
+	// 安全提示：命令行参数在进程列表与 shell 历史中可见
+	passwordViaCLI := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "password" {
+			passwordViaCLI = true
+		}
+	})
+	if passwordViaCLI {
+		golog.Warn("Security: passing the password via -password exposes it in the process list and shell history; prefer data/config.json")
+	}
+
 	return &cfg, nil
 }
 
@@ -161,6 +172,8 @@ func mergeEnv(cfg *ClientConfig) {
 			cfg.Server.Port = p
 		}
 	}
+	// 注意：环境变量可被子进程与进程环境检视工具读取，
+	// 敏感场景优先使用 0600 权限的配置文件
 	if v := os.Getenv("MIDIBRIDGE_PASSWORD"); v != "" {
 		cfg.Auth.Password = v
 	}
@@ -175,10 +188,11 @@ func saveConfig(configPath string, cfg *ClientConfig) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(configPath, data, 0644)
+	// 0600：配置内含明文密码，禁止同机其他用户读取
+	return os.WriteFile(configPath, data, 0600)
 }
 
 func ensureDir(path string) {
 	dir := filepath.Dir(path)
-	os.MkdirAll(dir, 0755)
+	os.MkdirAll(dir, 0700)
 }
