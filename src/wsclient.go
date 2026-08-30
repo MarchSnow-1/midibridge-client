@@ -26,6 +26,18 @@ const (
 	stateFailed
 )
 
+const (
+	// wsPingInterval 客户端主动发送协议层 ping 的间隔（保活）。
+	wsPingInterval = 30 * time.Second
+	// wsReadTimeout 读超时：超过该时间未收到任何帧（含 pong）即判定连接已死。
+	wsReadTimeout = 60 * time.Second
+	// authWatchdogTimeout 发出认证后的等待上限：超时未收到认证结果即断开重连，
+	// 防止服务器接受连接后不应答导致客户端永久"假在线"。
+	authWatchdogTimeout = 5 * time.Second
+	// maxReadMessageSize 单帧读取上限（覆盖大型 SysEx），防止超大帧耗尽内存。
+	maxReadMessageSize = 1 << 20
+)
+
 func (s clientState) String() string {
 	return [...]string{"IDLE", "CONNECTING", "AUTHENTICATING", "CONNECTED", "RECONNECTING", "FAILED"}[s]
 }
@@ -69,6 +81,8 @@ type WSClient struct {
 	stopChan chan struct{}
 	readDone chan string
 	mu       sync.Mutex
+
+	authWatchdog *time.Timer // 认证超时看门狗（mu 保护）
 }
 
 func NewWSClient() *WSClient {
@@ -196,10 +210,21 @@ func (w *WSClient) connectLoop() {
 		w.conn = conn
 		w.mu.Unlock()
 
+		// 读取限制与超时：防超大帧耗尽内存；读超时+pong 续期检出半开/死亡连接
+		conn.SetReadLimit(maxReadMessageSize)
+		conn.SetReadDeadline(time.Now().Add(wsReadTimeout))
+		conn.SetPongHandler(func(string) error {
+			conn.SetReadDeadline(time.Now().Add(wsReadTimeout))
+			return nil
+		})
+
 		firstDial = false
 		w.reconnectCount = 0
 		w.setState(stateAuthenticating)
 		w.emitStatus(StatusEvent{Type: "connected"})
+
+		// 认证看门狗：超时未收到认证结果即关闭连接进入重连
+		w.armAuthWatchdog(conn)
 
 		authMsg, _ := json.Marshal(map[string]string{"type": "auth", "password": w.password})
 		if err := conn.WriteMessage(websocket.TextMessage, authMsg); err != nil {
@@ -241,7 +266,34 @@ func (w *WSClient) connectLoop() {
 
 func (w *WSClient) readPump() {
 	var reason string
+	// 心跳：周期性发送协议层 ping（WriteControl 按 gorilla 约定可与
+	// ReadMessage 并发），配合读超时检出"服务器静默死亡"的半开连接
+	pingTicker := time.NewTicker(wsPingInterval)
+	pingStop := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-pingStop:
+				return
+			case <-w.stopChan:
+				return
+			case <-pingTicker.C:
+				w.mu.Lock()
+				conn := w.conn
+				w.mu.Unlock()
+				if conn == nil {
+					return
+				}
+				if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
+					// ping 失败不必额外处理：读超时会把死连接暴露出来
+					return
+				}
+			}
+		}
+	}()
 	defer func() {
+		pingTicker.Stop()
+		close(pingStop)
 		w.readDone <- reason
 	}()
 
@@ -272,6 +324,28 @@ func (w *WSClient) readPump() {
 	}
 }
 
+// armAuthWatchdog 启动认证看门狗：超时未收到认证结果即关闭连接，
+// 让 readPump 走失败路径触发重连，杜绝"认证中的永久假在线"。
+func (w *WSClient) armAuthWatchdog(conn *websocket.Conn) {
+	timer := time.AfterFunc(authWatchdogTimeout, func() {
+		golog.Warn(T("wsClient.authTimeout", nil))
+		conn.Close()
+	})
+	w.mu.Lock()
+	w.authWatchdog = timer
+	w.mu.Unlock()
+}
+
+// stopAuthWatchdog 停止认证看门狗（收到任何认证结果后调用）。
+func (w *WSClient) stopAuthWatchdog() {
+	w.mu.Lock()
+	if w.authWatchdog != nil {
+		w.authWatchdog.Stop()
+		w.authWatchdog = nil
+	}
+	w.mu.Unlock()
+}
+
 func (w *WSClient) handleMessage(raw []byte) string {
 	var msg serverMsg
 	if err := json.Unmarshal(raw, &msg); err != nil {
@@ -281,10 +355,12 @@ func (w *WSClient) handleMessage(raw []byte) string {
 
 	switch msg.Type {
 	case "auth_ok":
+		w.stopAuthWatchdog()
 		w.setState(stateConnected)
 		w.emitStatus(StatusEvent{Type: "authenticated"})
 
 	case "auth_fail":
+		w.stopAuthWatchdog()
 		reason := msg.Reason
 		if reason == "" {
 			reason = "wrong password"
@@ -305,6 +381,7 @@ func (w *WSClient) handleMessage(raw []byte) string {
 		}
 
 	case "kicked":
+		w.stopAuthWatchdog()
 		reason := msg.Reason
 		if reason == "" {
 			reason = "unknown reason"
