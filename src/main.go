@@ -87,7 +87,10 @@ func main() {
 				}
 			}
 
-			midiOut.Write(data)
+			if err := midiOut.Write(data); err != nil {
+				// 详细错误与自愈（后台重建端口）已由 MidiOutput 内部处理
+				_ = err
+			}
 			lastSend = time.Now()
 		}
 	}()
