@@ -121,7 +121,7 @@ func main() {
 		}
 	}()
 
-	wsClient.Connect(cfg.Server.Host, cfg.Server.Port, cfg.Auth.Password, cfg.Reconnect)
+	wsClient.Connect(cfg.Server.Host, cfg.Server.Port, cfg.Auth.Password, cfg.Reconnect, cfg.TLS)
 
 	golog.Info("Ready")
 
