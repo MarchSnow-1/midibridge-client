@@ -21,7 +21,21 @@ type MidiOutput struct {
 	name      string
 	notesHeld map[byte]bool
 	mu        sync.Mutex
+
+	// 写失败自愈状态（mu 保护）：
+	// 连续写失败达到阈值时后台重建端口（设备热插拔恢复），
+	// 重建有最短间隔与进行中标志，避免重建风暴
+	consecutiveWriteFails int
+	lastReinit            time.Time
+	reinitInProgress      bool
 }
+
+const (
+	// reinitAfterFails 连续写失败达到该次数后触发后台重建端口
+	reinitAfterFails = 5
+	// reinitMinInterval 两次重建尝试之间的最短间隔
+	reinitMinInterval = 5 * time.Second
+)
 
 func NewMidiOutput() *MidiOutput {
 	return &MidiOutput{
@@ -135,42 +149,98 @@ func (m *MidiOutput) initWindows() error {
 
 func (m *MidiOutput) Write(data []byte) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	if m.out == nil {
+		m.mu.Unlock()
+		golog.Warn(T("virtualMidi.notInit", nil))
 		return nil
 	}
 
 	// 跳过 All Notes Off (CC#123) 和 All Sound Off (CC#120)
 	if len(data) >= 3 && data[0]&0xF0 == 0xB0 && (data[1] == 123 || data[1] == 120) {
+		m.mu.Unlock()
 		return nil
 	}
 
 	_, err := m.out.Write(data)
-	if err != nil {
+	if err == nil {
+		m.consecutiveWriteFails = 0
+		m.mu.Unlock()
+		return nil
+	}
+
+	// 写失败（典型原因：loopMIDI 端口被关闭或设备移除）。
+	// 错误日志限速（防 MIDI 速率下的日志洪水），连续失败达到阈值
+	// 时触发后台重建端口
+	m.consecutiveWriteFails++
+	fails := m.consecutiveWriteFails
+	shouldReinit := fails == reinitAfterFails && !m.reinitInProgress &&
+		time.Since(m.lastReinit) > reinitMinInterval
+	if shouldReinit {
+		m.reinitInProgress = true
+		m.lastReinit = time.Now()
+	}
+	m.mu.Unlock()
+
+	if fails == 1 || fails%50 == 0 {
 		golog.Error(T("virtualMidi.sendFailed", map[string]string{"error": err.Error()}))
+	}
+	if shouldReinit {
+		golog.Warn("MIDI write failures detected, reinitializing port in background")
+		go m.reinitAsync()
 	}
 	return err
 }
 
+// Reinit 同步重建 MIDI 端口（对外保留的显式入口；内部自愈走 reinitAsync）。
 func (m *MidiOutput) Reinit() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.reinitLocked()
+	m.closeLockedSafe()
+	m.reinitAttempts()
 }
 
-func (m *MidiOutput) reinitLocked() {
+// reinitAsync 后台重建端口。关闭旧端口在锁内完成，等待与重试在锁外，
+// 避免持锁睡眠阻塞所有 Write（旧实现的缺陷）。
+// 注意：后台重建期间本进程内无其他 Init 调用方，驱动实例重建是安全的。
+func (m *MidiOutput) reinitAsync() {
+	m.closeLockedSafe()
+	ok := m.reinitAttempts()
+	m.mu.Lock()
+	m.reinitInProgress = false
+	if ok {
+		m.consecutiveWriteFails = 0
+	}
+	m.mu.Unlock()
+	if ok {
+		golog.Info("MIDI port reinitialized successfully")
+	} else {
+		golog.Error("MIDI port reinit failed after 3 attempts, will retry after further write failures")
+	}
+}
+
+// closeLockedSafe 在锁内关闭并清空当前端口与驱动。
+func (m *MidiOutput) closeLockedSafe() {
+	m.mu.Lock()
 	m.closeLocked()
+	m.mu.Unlock()
+}
+
+// reinitAttempts 最多重试 3 次初始化，返回是否成功。
+// Init 会写入 drv/out 字段，须持锁进行（与 Write 的读取互斥）；
+// 等待重试在锁外，不阻塞写入方。
+func (m *MidiOutput) reinitAttempts() bool {
 	time.Sleep(200 * time.Millisecond)
 	for attempt := 1; attempt <= 3; attempt++ {
-		if err := m.Init(m.name); err == nil {
-			return
+		m.mu.Lock()
+		err := m.Init(m.name)
+		m.mu.Unlock()
+		if err == nil {
+			return true
 		}
 		if attempt < 3 {
 			time.Sleep(500 * time.Millisecond)
 		}
 	}
-	golog.Error("MIDI reinit failed after 3 attempts")
+	return false
 }
 
 func (m *MidiOutput) Close() {
