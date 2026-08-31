@@ -85,8 +85,8 @@ func main() {
 			}
 
 			// 按 delta 时间控制发送节奏，防止 WinMM buffer 溢出
-			if !lastSend.IsZero() && evt.DeltaMs > 0 {
-				targetGap := time.Duration(evt.DeltaMs * float64(time.Second))
+			if !lastSend.IsZero() && evt.DeltaSec > 0 {
+				targetGap := time.Duration(evt.DeltaSec * float64(time.Second))
 				actualGap := time.Since(lastSend)
 				if targetGap > actualGap {
 					wait := targetGap - actualGap
