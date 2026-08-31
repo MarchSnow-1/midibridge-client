@@ -346,6 +346,48 @@ func (w *WSClient) stopAuthWatchdog() {
 	w.mu.Unlock()
 }
 
+// validMidiMessage 校验一条（单条）MIDI 消息的结构合法性。
+// 上游应为完整消息（服务端按消息转发），此处只做防御性校验：
+//  - 首字节必须是状态字节（≥0x80）
+//  - 通道消息长度必须与类型匹配
+//  - SysEx 必须以 0xF0 开始、0xF7 结束，且不超过大小上限
+//  - 系统实时消息（0xF8-0xFF）恒为 1 字节
+const (
+	maxSysExLen = 64 * 1024
+)
+
+func validMidiMessage(data []byte) bool {
+	if len(data) == 0 || len(data) > maxSysExLen {
+		return false
+	}
+	status := data[0]
+	if status < 0x80 {
+		return false // 首字节必须是状态字节
+	}
+
+	msgType := status & 0xF0
+	switch {
+	case status >= 0xF0:
+		switch status {
+		case 0xF0: // SysEx：F0 ... F7
+			return len(data) >= 2 && data[len(data)-1] == 0xF7
+		case 0xF1, 0xF3: // MTC Quarter Frame, Song Select — 2 字节
+			return len(data) == 2
+		case 0xF2: // Song Position Pointer — 3 字节
+			return len(data) == 3
+		case 0xF6, 0xF8, 0xFA, 0xFB, 0xFC, 0xFE, 0xFF: // 单字节实时/通用
+			return len(data) == 1
+		case 0xF4, 0xF5, 0xF7, 0xF9, 0xFD: // 未定义/结束符不应作为首字节
+			return false
+		}
+		return false
+	case msgType == 0xC0 || msgType == 0xD0: // Program Change / Channel Pressure — 2 字节
+		return len(data) == 2
+	default: // 其余通道消息（Note/CC/Pitch Bend）— 3 字节
+		return len(data) == 3
+	}
+}
+
 func (w *WSClient) handleMessage(raw []byte) string {
 	var msg serverMsg
 	if err := json.Unmarshal(raw, &msg); err != nil {
@@ -374,6 +416,12 @@ func (w *WSClient) handleMessage(raw []byte) string {
 		if err := json.Unmarshal(msg.Data, &data); err != nil {
 			golog.Warn("midi parse error: " + err.Error())
 		} else if len(data.Bytes) > 0 {
+			// 服务器下发数据校验：防止被入侵/恶意的服务器
+			// 向本机 MIDI 设备注入畸形或超大字节流
+			if !validMidiMessage(data.Bytes) {
+				golog.Warn("Discarded invalid MIDI message from server")
+				return ""
+			}
 			select {
 			case w.MidiChan <- MidiEvent{Data: data.Bytes, DeltaMs: data.Time}:
 			default:
