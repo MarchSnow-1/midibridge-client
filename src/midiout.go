@@ -19,7 +19,7 @@ type MidiOutput struct {
 	drv       midi.Driver
 	out       midi.Out
 	name      string
-	notesHeld map[byte]bool
+	notesHeld map[noteKey]bool
 	mu        sync.Mutex
 
 	// 写失败自愈状态（mu 保护）：
@@ -37,35 +37,45 @@ const (
 	reinitMinInterval = 5 * time.Second
 )
 
+// noteKey 是 notesHeld 的复合键：(通道, 音符)。
+// 只按音符键控无法区分 16 个通道的同名音符——
+// 一个通道的 Note Off 会把另一通道仍按住的同名音符从表中误删。
+type noteKey struct {
+	channel byte // 0-15
+	note    byte
+}
+
 func NewMidiOutput() *MidiOutput {
 	return &MidiOutput{
-		notesHeld: make(map[byte]bool),
+		notesHeld: make(map[noteKey]bool),
 	}
 }
 
-func (m *MidiOutput) HoldNote(note byte) {
+func (m *MidiOutput) HoldNote(channel, note byte) {
 	m.mu.Lock()
-	m.notesHeld[note] = true
+	m.notesHeld[noteKey{channel, note}] = true
 	m.mu.Unlock()
 }
 
-func (m *MidiOutput) ReleaseNote(note byte) {
+func (m *MidiOutput) ReleaseNote(channel, note byte) {
 	m.mu.Lock()
-	delete(m.notesHeld, note)
+	delete(m.notesHeld, noteKey{channel, note})
 	m.mu.Unlock()
 }
 
 func (m *MidiOutput) AllNotesOff() {
 	m.mu.Lock()
-	notes := make([]byte, 0, len(m.notesHeld))
-	for note := range m.notesHeld {
-		notes = append(notes, note)
+	keys := make([]noteKey, 0, len(m.notesHeld))
+	for k := range m.notesHeld {
+		keys = append(keys, k)
 	}
-	m.notesHeld = make(map[byte]bool)
+	m.notesHeld = make(map[noteKey]bool)
 	m.mu.Unlock()
 
-	for _, note := range notes {
-		m.Write([]byte{0x80, note, 0})
+	// 按各自原始通道发送 Note Off——固定发通道 1 的旧实现
+	// 无法释放其他通道上悬挂的音符（多通道流的卡音缺陷）
+	for _, k := range keys {
+		m.Write([]byte{0x80 | k.channel, k.note, 0})
 	}
 }
 

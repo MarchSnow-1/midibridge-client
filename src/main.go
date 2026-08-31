@@ -61,17 +61,18 @@ func main() {
 		for evt := range wsClient.MidiChan {
 			data := evt.Data
 
-			// 跟踪按下的音符
+			// 跟踪按下的音符（按通道+音符复合键，支持多通道流）
 			if len(data) >= 3 {
+				channel := data[0] & 0x0F
 				switch data[0] & 0xF0 {
 				case 0x90:
 					if data[2] > 0 {
-						midiOut.HoldNote(data[1])
+						midiOut.HoldNote(channel, data[1])
 					} else {
-						midiOut.ReleaseNote(data[1])
+						midiOut.ReleaseNote(channel, data[1])
 					}
 				case 0x80:
-					midiOut.ReleaseNote(data[1])
+					midiOut.ReleaseNote(channel, data[1])
 				}
 			}
 
