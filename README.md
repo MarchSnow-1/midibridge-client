@@ -142,6 +142,39 @@ Higher priority overrides lower:
 | `MIDIBRIDGE_PASSWORD` | `auth.password` |
 | `MIDIBRIDGE_PORT_NAME` | `midi.virtualPortName` |
 
+## Security
+
+Read this section before running the client outside a network you fully trust.
+
+- **The connection is plaintext by default.** Unless TLS is enabled, the client connects over `ws://`, and everything — including the password — travels unencrypted over the network. Use the default mode only on trusted networks, or enable TLS.
+- **The password is stored in plaintext** in `data/config.json` (created with `0600` permissions — readable by the file owner only) and, without TLS, it is also transmitted in cleartext during authentication.
+- **Prefer the config file over `--password`.** Command-line arguments are visible in the process list and shell history. The client prints a security warning whenever `--password` is used.
+
+### Enabling TLS
+
+Set `tls.enabled` to `true` to connect over `wss://` instead:
+
+```json
+"tls": {
+  "enabled": true,
+  "caCert": ""
+}
+```
+
+- `enabled`: connect via `wss://` (TLS ≥ 1.2). The server certificate is verified against the system CA store.
+- `caCert`: optional path to a PEM certificate file. When set, it **replaces** the system CA store as the trust root for verification — intended for servers that use self-signed certificates.
+
+**Example — trusting a self-signed server certificate:**
+
+```json
+"tls": {
+  "enabled": true,
+  "caCert": "ca.crt"
+}
+```
+
+Put the server's certificate (or the CA certificate that signed it) at the configured path, and the client will verify the server against it over an encrypted `wss://` connection.
+
 ## Build from Source
 
 ### Requirements
