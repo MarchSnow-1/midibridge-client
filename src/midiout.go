@@ -249,11 +249,16 @@ func (m *MidiOutput) closeLockedSafe() {
 // reinitAttempts 最多重试 3 次初始化，返回是否成功。
 // Init 会写入 drv/out 字段，须持锁进行（与 Write 的读取互斥）；
 // 等待重试在锁外，不阻塞写入方。
+// 每次 Init 失败都会新建驱动并写入 m.drv——若不清理会反复泄漏上一
+// 次失败尝试创建的驱动（rtmidi 原生资源），因此失败后立即 closeLocked。
 func (m *MidiOutput) reinitAttempts() bool {
 	time.Sleep(200 * time.Millisecond)
 	for attempt := 1; attempt <= 3; attempt++ {
 		m.mu.Lock()
 		err := m.Init(m.name)
+		if err != nil {
+			m.closeLocked()
+		}
 		m.mu.Unlock()
 		if err == nil {
 			return true
