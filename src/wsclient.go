@@ -16,17 +16,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-type clientState int
-
-const (
-	stateIdle clientState = iota
-	stateConnecting
-	stateAuthenticating
-	stateConnected
-	stateReconnecting
-	stateFailed
-)
-
 const (
 	// wsPingInterval 客户端主动发送协议层 ping 的间隔（保活）。
 	wsPingInterval = 30 * time.Second
@@ -37,11 +26,10 @@ const (
 	authWatchdogTimeout = 5 * time.Second
 	// maxReadMessageSize 单帧读取上限（覆盖大型 SysEx），防止超大帧耗尽内存。
 	maxReadMessageSize = 1 << 20
+	// minReconnectIntervalMs 重连间隔的下限钳制：防止配置为 0/负数后
+	// 退化为无退避的高频重连风暴。
+	minReconnectIntervalMs = 250
 )
-
-func (s clientState) String() string {
-	return [...]string{"IDLE", "CONNECTING", "AUTHENTICATING", "CONNECTED", "RECONNECTING", "FAILED"}[s]
-}
 
 type StatusEvent struct {
 	Type   string
@@ -61,8 +49,10 @@ type midiData struct {
 }
 
 type MidiEvent struct {
-	Data    []byte
-	DeltaMs float64
+	Data []byte
+	// DeltaSec 距上一条消息的时间增量（秒）。
+	// 协议字段 "t" 即秒；旧名 DeltaMs 是误导性命名。
+	DeltaSec float64
 }
 
 type WSClient struct {
@@ -72,7 +62,6 @@ type WSClient struct {
 	rc       ReconnectConfig
 	tlsCfg   TLSConfig
 
-	state          clientState
 	conn           *websocket.Conn
 	reconnectCount int
 
@@ -101,7 +90,6 @@ func (w *WSClient) Connect(host string, port int, password string, rc ReconnectC
 	w.password = password
 	w.rc = rc
 	w.tlsCfg = tlsCfg
-	w.state = stateIdle
 	go w.connectLoop()
 }
 
@@ -152,10 +140,6 @@ func (w *WSClient) Disconnect() {
 	}
 }
 
-func (w *WSClient) setState(s clientState) {
-	w.state = s
-}
-
 func (w *WSClient) connectLoop() {
 	firstDial := true
 	for {
@@ -169,24 +153,19 @@ func (w *WSClient) connectLoop() {
 		count := w.reconnectCount
 		w.mu.Unlock()
 		if w.rc.MaxAttempts > 0 && count >= w.rc.MaxAttempts {
-			w.setState(stateFailed)
 			w.emitStatus(StatusEvent{Type: "max_reconnects"})
 			return
 		}
 
 		url := w.dialURL()
 		if firstDial {
-			w.setState(stateConnecting)
 			golog.Info(T("wsClient.connecting", map[string]string{"url": url}))
-		} else {
-			w.setState(stateConnecting)
 		}
 
 		dialer, err := w.buildDialer()
 		if err != nil {
 			golog.Error(T("wsClient.connectingFailed", map[string]string{"url": url, "error": err.Error()}))
 			if !w.rc.Enabled {
-				w.setState(stateFailed)
 				return
 			}
 			w.reconnectWait()
@@ -200,7 +179,6 @@ func (w *WSClient) connectLoop() {
 		if err != nil {
 			golog.Error(T("wsClient.connectingFailed", map[string]string{"url": url, "error": err.Error()}))
 			if !w.rc.Enabled {
-				w.setState(stateFailed)
 				return
 			}
 			w.reconnectWait()
@@ -223,7 +201,6 @@ func (w *WSClient) connectLoop() {
 		})
 
 		firstDial = false
-		w.setState(stateAuthenticating)
 		w.emitStatus(StatusEvent{Type: "connected"})
 
 		// 认证看门狗：超时未收到认证结果即关闭连接进入重连
@@ -234,7 +211,6 @@ func (w *WSClient) connectLoop() {
 			golog.Error(T("wsClient.error", map[string]string{"error": err.Error()}))
 			w.closeConn()
 			if !w.rc.Enabled {
-				w.setState(stateFailed)
 				return
 			}
 			w.reconnectWait()
@@ -250,17 +226,15 @@ func (w *WSClient) connectLoop() {
 		reason := <-w.readDone
 		w.closeConn()
 
-		// 排空旧会话积压事件：带着过时 DeltaMs 的旧事件在新连接建立后
+		// 排空旧会话积压事件：带着过时时间增量的旧事件在新连接建立后
 		// 迟到重放会造成时序错乱（配对的 Note Off 可能已被丢弃导致卡音）
 		w.drainMidiChan()
 
 		if reason == "failed" {
-			w.setState(stateFailed)
 			return
 		}
 
 		if !w.rc.Enabled {
-			w.setState(stateFailed)
 			return
 		}
 
@@ -426,7 +400,6 @@ func (w *WSClient) handleMessage(raw []byte) string {
 		w.mu.Lock()
 		w.reconnectCount = 0
 		w.mu.Unlock()
-		w.setState(stateConnected)
 		w.emitStatus(StatusEvent{Type: "authenticated"})
 
 	case "auth_fail":
@@ -451,7 +424,7 @@ func (w *WSClient) handleMessage(raw []byte) string {
 				return ""
 			}
 			select {
-			case w.MidiChan <- MidiEvent{Data: data.Bytes, DeltaMs: data.Time}:
+			case w.MidiChan <- MidiEvent{Data: data.Bytes, DeltaSec: data.Time}:
 			default:
 			}
 		}
@@ -486,7 +459,6 @@ func (w *WSClient) reconnectWait() {
 	delay := w.reconnectDelayLocked(count)
 	w.mu.Unlock()
 
-	w.setState(stateReconnecting)
 	delaySec := fmt.Sprintf("%.1f", delay.Seconds())
 	golog.Info(T("wsClient.reconnecting", map[string]string{"delay": delaySec, "attempt": strconv.Itoa(count)}))
 	w.emitStatus(StatusEvent{Type: "reconnecting", Reason: delaySec})
@@ -498,8 +470,14 @@ func (w *WSClient) reconnectWait() {
 }
 
 // reconnectDelayLocked 计算第 count 次重连的退避延迟。调用方必须已持有 w.mu。
+// intervalMs 配置为 0/负数时钳制为下限（minReconnectIntervalMs），
+// 防止退化为无退避的高频重连风暴。
 func (w *WSClient) reconnectDelayLocked(count int) time.Duration {
-	baseDelay := float64(w.rc.IntervalMs) * math.Pow(1.5, float64(count-1))
+	intervalMs := w.rc.IntervalMs
+	if intervalMs < minReconnectIntervalMs {
+		intervalMs = minReconnectIntervalMs
+	}
+	baseDelay := float64(intervalMs) * math.Pow(1.5, float64(count-1))
 	maxDelay := 30000.0
 	jitter := float64(rand.Intn(1000))
 	delayMs := math.Min(baseDelay, maxDelay) + jitter
