@@ -164,7 +164,10 @@ func (w *WSClient) connectLoop() {
 		default:
 		}
 
-		if w.rc.MaxAttempts > 0 && w.reconnectCount >= w.rc.MaxAttempts {
+		w.mu.Lock()
+		count := w.reconnectCount
+		w.mu.Unlock()
+		if w.rc.MaxAttempts > 0 && count >= w.rc.MaxAttempts {
 			w.setState(stateFailed)
 			w.emitStatus(StatusEvent{Type: "max_reconnects"})
 			return
@@ -219,7 +222,6 @@ func (w *WSClient) connectLoop() {
 		})
 
 		firstDial = false
-		w.reconnectCount = 0
 		w.setState(stateAuthenticating)
 		w.emitStatus(StatusEvent{Type: "connected"})
 
@@ -398,6 +400,11 @@ func (w *WSClient) handleMessage(raw []byte) string {
 	switch msg.Type {
 	case "auth_ok":
 		w.stopAuthWatchdog()
+		// 仅在真正认证成功后清零重连计数：防止"接受连接即秒断"的
+		// 恶意服务器反复重置计数、绕过 MaxAttempts 上限
+		w.mu.Lock()
+		w.reconnectCount = 0
+		w.mu.Unlock()
 		w.setState(stateConnected)
 		w.emitStatus(StatusEvent{Type: "authenticated"})
 
@@ -452,11 +459,15 @@ func (w *WSClient) handleMessage(raw []byte) string {
 }
 
 func (w *WSClient) reconnectWait() {
+	w.mu.Lock()
 	w.reconnectCount++
+	count := w.reconnectCount
+	delay := w.reconnectDelayLocked(count)
+	w.mu.Unlock()
+
 	w.setState(stateReconnecting)
-	delay := w.reconnectDelay()
 	delaySec := fmt.Sprintf("%.1f", delay.Seconds())
-	golog.Info(T("wsClient.reconnecting", map[string]string{"delay": delaySec, "attempt": itoa(w.reconnectCount)}))
+	golog.Info(T("wsClient.reconnecting", map[string]string{"delay": delaySec, "attempt": itoa(count)}))
 	w.emitStatus(StatusEvent{Type: "reconnecting", Reason: delaySec})
 
 	select {
@@ -465,8 +476,9 @@ func (w *WSClient) reconnectWait() {
 	}
 }
 
-func (w *WSClient) reconnectDelay() time.Duration {
-	baseDelay := float64(w.rc.IntervalMs) * math.Pow(1.5, float64(w.reconnectCount-1))
+// reconnectDelayLocked 计算第 count 次重连的退避延迟。调用方必须已持有 w.mu。
+func (w *WSClient) reconnectDelayLocked(count int) time.Duration {
+	baseDelay := float64(w.rc.IntervalMs) * math.Pow(1.5, float64(count-1))
 	maxDelay := 30000.0
 	jitter := float64(rand.Intn(1000))
 	delayMs := math.Min(baseDelay, maxDelay) + jitter
