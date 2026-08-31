@@ -193,7 +193,10 @@ func (m *MidiOutput) Write(data []byte) error {
 	// 时触发后台重建端口
 	m.consecutiveWriteFails++
 	fails := m.consecutiveWriteFails
-	shouldReinit := fails == reinitAfterFails && !m.reinitInProgress &&
+	// 失败次数达到阈值即触发重建：失败后计数器不重置（仅成功时清零），
+	// 若用 ==，重建失败后次数继续增长将永远不再等于阈值，端口永不再被重试。
+	// reinitInProgress 与 reinitMinInterval 双重保护防重建风暴。
+	shouldReinit := fails >= reinitAfterFails && !m.reinitInProgress &&
 		time.Since(m.lastReinit) > reinitMinInterval
 	if shouldReinit {
 		m.reinitInProgress = true
