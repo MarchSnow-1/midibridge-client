@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"testing"
 )
 
@@ -65,5 +66,31 @@ func TestMergeFileFieldLevel(t *testing.T) {
 	}
 	if dst3.Reconnect.MaxAttempts != 10 {
 		t.Errorf("MaxAttempts = %d, want 10", dst3.Reconnect.MaxAttempts)
+	}
+}
+
+// TestResolveCaCertPath 验证相对 caCert 路径锚定到配置文件所在目录。
+func TestResolveCaCertPath(t *testing.T) {
+	configPath := filepath.Join("some", "dir", "data", "config.json")
+
+	// 绝对路径原样保留
+	abs, err := filepath.Abs("ca.pem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := resolveCaCertPath(configPath, abs); got != abs {
+		t.Errorf("absolute path changed to %q", got)
+	}
+
+	// 空值原样保留
+	if got := resolveCaCertPath(configPath, ""); got != "" {
+		t.Errorf("empty path changed to %q", got)
+	}
+
+	// 相对路径锚定到配置目录
+	got := resolveCaCertPath(configPath, "ca.crt")
+	want := filepath.Join("some", "dir", "data", "ca.crt")
+	if got != want {
+		t.Errorf("relative path = %q, want %q", got, want)
 	}
 }
