@@ -42,7 +42,13 @@ func main() {
 
 	initI18N(cfg.Lang)
 
-	golog.Info(T("index.targetServer", map[string]string{"host": cfg.Server.Host, "port": strconv.Itoa(cfg.Server.Port)}))
+	// 启动日志中的目标 URL 按实际协议显示：TLS 启用时为 wss://，
+	// 否则为 ws://（与 wsclient.dialURL 保持一致）。
+	scheme := "ws"
+	if cfg.TLS.Enabled {
+		scheme = "wss"
+	}
+	golog.Info(T("index.targetServer", map[string]string{"scheme": scheme, "host": cfg.Server.Host, "port": strconv.Itoa(cfg.Server.Port)}))
 
 	if cfg.Logging.File {
 		enableFileLogging()
