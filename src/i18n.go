@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
 
 var activeStrings map[string]string
 
@@ -112,15 +115,35 @@ var zhCNStrings = map[string]string{
 	"virtualMidi.closed":               "MIDI 端口已关闭: \"{name}\"",
 }
 
+// normalizeLang 将语言标识归一化：小写、下划线转连字符。
+// "zh-CN" / "zh-cn" / "zh_CN" / "zh-Hans-CN" 均匹配中文。
+func normalizeLang(lang string) string {
+	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(lang), "_", "-"))
+}
+
 func initI18N(lang string) {
-	switch lang {
-	case "zh-CN":
+	norm := normalizeLang(lang)
+	switch {
+	case strings.HasPrefix(norm, "zh"):
 		activeStrings = zhCNStrings
 	default:
 		activeStrings = enStrings
 	}
 }
 
+// sanitizeParam 剥离参数值中的控制字符（含 \r \n），
+// 防止服务器可控的 reason 等外部输入在日志中伪造出新的日志行。
+func sanitizeParam(v string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, v)
+}
+
+// T 按当前语言渲染模板。使用 strings.NewReplacer 单遍替换：
+// 无级联（某参数值含另一占位符时行为确定），并对参数值做控制字符净化。
 func T(key string, params map[string]string) string {
 	template := activeStrings[key]
 	if template == "" {
@@ -129,8 +152,12 @@ func T(key string, params map[string]string) string {
 	if template == "" {
 		return key
 	}
-	for k, v := range params {
-		template = strings.ReplaceAll(template, "{"+k+"}", v)
+	if len(params) == 0 {
+		return template
 	}
-	return template
+	pairs := make([]string, 0, len(params)*2)
+	for k, v := range params {
+		pairs = append(pairs, "{"+k+"}", sanitizeParam(v))
+	}
+	return strings.NewReplacer(pairs...).Replace(template)
 }
