@@ -166,6 +166,14 @@ func (m *MidiOutput) Write(data []byte) error {
 		return nil
 	}
 
+	// 结构校验：首字节必须是状态字节，长度必须与消息类型匹配。
+	// 上游（wsclient）已校验过，此处防御直通调用方（如测试或未来
+	// 的原始流输入）传入无状态字节的数据——驱动层不保证拒绝畸形输入
+	if !validMidiMessage(data) {
+		m.mu.Unlock()
+		return nil
+	}
+
 	// 跳过 All Notes Off (CC#123) 和 All Sound Off (CC#120)
 	if len(data) >= 3 && data[0]&0xF0 == 0xB0 && (data[1] == 123 || data[1] == 120) {
 		m.mu.Unlock()
