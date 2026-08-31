@@ -127,7 +127,20 @@ func loadConfig(configPath string) (*ClientConfig, error) {
 		golog.Warn("Security: passing the password via -password exposes it in the process list and shell history; prefer data/config.json")
 	}
 
+	// 将相对 caCert 路径锚定到配置文件所在目录（与配置锚点一致），
+	// 避免从其他目录启动时按工作目录解析导致证书找不到。
+	cfg.TLS.CACert = resolveCaCertPath(configPath, cfg.TLS.CACert)
+
 	return &cfg, nil
+}
+
+// resolveCaCertPath 将相对 tls.caCert 路径解析为配置文件所在目录下的绝对路径。
+// 配置锚定在可执行文件目录，caCert 与配置同基准，不受进程工作目录影响。
+func resolveCaCertPath(configPath, cert string) string {
+	if cert == "" || filepath.IsAbs(cert) {
+		return cert
+	}
+	return filepath.Join(filepath.Dir(configPath), cert)
 }
 
 // subKeys 从 rawKeys 中提取指定顶层键的子键集合。
