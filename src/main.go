@@ -119,10 +119,15 @@ func main() {
 					msg = T("index.kicked", map[string]string{"reason": evt.Reason})
 				}
 				golog.Warn(msg)
-				if evt.Reason == "" {
-					if cfg.MIDI.ReconnectOnKick {
-						golog.Warn(T("index.kickedHint", nil))
-					}
+				// reconnectOnKick 语义接线：
+				//  false = 被踢后进程直接退出（文档承诺的行为）
+				//  true  = 保持运行，重连与否由 reconnect.enabled 决定
+				if !cfg.MIDI.ReconnectOnKick {
+					golog.Info("reconnectOnKick is disabled, exiting")
+					golog.Info("Goodbye.")
+					os.Exit(0)
+				} else if evt.Reason == "unknown reason" {
+					golog.Warn(T("index.kickedHint", nil))
 				}
 			case "disconnected":
 				midiOut.AllNotesOff()
