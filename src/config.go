@@ -240,8 +240,13 @@ func saveConfig(configPath string, cfg *ClientConfig) error {
 	if err != nil {
 		return err
 	}
-	// 0600：配置内含明文密码，禁止同机其他用户读取
-	return os.WriteFile(configPath, data, 0600)
+	// 0600：配置内含明文密码，禁止同机其他用户读取。
+	// WriteFile 的权限参数只在新建时生效，对已存在的宽松权限文件
+	// 重写后仍需显式 Chmod 收紧。
+	if err := os.WriteFile(configPath, data, 0600); err != nil {
+		return err
+	}
+	return os.Chmod(configPath, 0600)
 }
 
 func ensureDir(path string) {

@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -92,5 +94,28 @@ func TestResolveCaCertPath(t *testing.T) {
 	want := filepath.Join("some", "dir", "data", "ca.crt")
 	if got != want {
 		t.Errorf("relative path = %q, want %q", got, want)
+	}
+}
+
+// TestSaveConfigTightensPerms 验证重写已存在的宽松权限配置文件后权限被收紧到 0600。
+func TestSaveConfigTightensPerms(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX 权限位在 Windows 上不生效")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(path, []byte(`{}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := defaultConfig()
+	if err := saveConfig(path, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm != 0600 {
+		t.Errorf("perm = %o, want 600", perm)
 	}
 }
