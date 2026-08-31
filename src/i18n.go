@@ -8,7 +8,7 @@ import (
 var activeStrings map[string]string
 
 var enStrings = map[string]string{
-	"index.targetServer":            "Target server: ws://{host}:{port}",
+	"index.targetServer":            "Target server: {scheme}://{host}:{port}",
 	"index.connected":               "Connected to server",
 	"index.authenticated":           "Authenticated, receiving MIDI signals",
 	"index.authFailed":              "Authentication failed: {reason}. Check password in data/config.json",
@@ -55,7 +55,7 @@ var enStrings = map[string]string{
 }
 
 var zhCNStrings = map[string]string{
-	"index.targetServer":            "目标服务端: ws://{host}:{port}",
+	"index.targetServer":            "目标服务端: {scheme}://{host}:{port}",
 	"index.connected":               "已连接到服务端",
 	"index.authenticated":           "认证成功，开始接收 MIDI 信号",
 	"index.authFailed":              "认证失败: {reason}，请检查 data/config.json 中的密码配置",
