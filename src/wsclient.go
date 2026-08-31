@@ -450,9 +450,10 @@ func (w *WSClient) handleMessage(raw []byte) string {
 		}
 		golog.Warn(T("wsClient.kicked", map[string]string{"reason": reason}))
 		w.emitStatus(StatusEvent{Type: "kicked", Reason: reason})
-		if reason == "password_changed" {
-			return "failed"
-		}
+		// 被踢是否退出由 main 的 reconnectOnKick 决定（false 时 os.Exit(0)）。
+		// 这里一律返回 closed 走重连路径，包括 password_changed——文档承诺
+		// reconnectOnKick=true 时改密被踢也会按 reconnect 设置自动重连；
+		// 若密码确实已过期，重连后的 auth_fail 会再走 failed 退出。
 		return "closed"
 
 	case "pong":

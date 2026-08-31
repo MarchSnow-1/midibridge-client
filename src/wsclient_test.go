@@ -45,3 +45,34 @@ func TestValidMidiMessage(t *testing.T) {
 		}
 	}
 }
+
+// TestHandleKickedReconnects 验证被踢（含 password_changed）时 handleMessage
+// 返回 closed 走重连路径，而非 failed 永久退出。reconnectOnKick=false 的
+// 退出由 main 处理，wsclient 自身应始终允许重连。
+func TestHandleKickedReconnects(t *testing.T) {
+	cases := []struct {
+		name   string
+		raw    string
+		want   string
+		reason string
+	}{
+		{"kick password_changed", `{"type":"kicked","reason":"password_changed"}`, "closed", "password_changed"},
+		{"kick taken over", `{"type":"kicked","reason":"replaced"}`, "closed", "replaced"},
+		{"kick unknown", `{"type":"kicked"}`, "closed", "unknown reason"},
+	}
+	for _, c := range cases {
+		w := NewWSClient()
+		got := w.handleMessage([]byte(c.raw))
+		if got != c.want {
+			t.Errorf("%s: handleMessage = %q, want %q", c.name, got, c.want)
+		}
+		select {
+		case evt := <-w.StatusChan:
+			if evt.Type != "kicked" || evt.Reason != c.reason {
+				t.Errorf("%s: status = %+v, want kicked/%q", c.name, evt, c.reason)
+			}
+		default:
+			t.Errorf("%s: no kicked status emitted", c.name)
+		}
+	}
+}
