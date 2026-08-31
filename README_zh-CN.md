@@ -142,6 +142,39 @@ macOS / Linux 下虚拟端口会自动创建。Windows 下需先在 loopMIDI 中
 | `MIDIBRIDGE_PASSWORD` | `auth.password` |
 | `MIDIBRIDGE_PORT_NAME` | `midi.virtualPortName` |
 
+## 安全说明
+
+在非完全可信的网络中运行客户端之前，请先阅读本节。
+
+- **连接默认为明文。** 未启用 TLS 时，客户端通过 `ws://` 连接，所有数据（包括密码）均以明文形式在网络上传输。请仅在可信网络中使用默认模式，或启用 TLS。
+- **密码以明文存储**在 `data/config.json` 中（文件以 `0600` 权限创建，仅文件所有者可读）；未启用 TLS 时，密码在认证过程中同样以明文传输。
+- **优先使用配置文件而非 `--password`。** 命令行参数在进程列表与 shell 历史中可见，客户端检测到 `--password` 时会打印安全警告。
+
+### 启用 TLS
+
+将 `tls.enabled` 设为 `true`，即可改用 `wss://` 加密连接：
+
+```json
+"tls": {
+  "enabled": true,
+  "caCert": ""
+}
+```
+
+- `enabled`：通过 `wss://` 连接（TLS ≥ 1.2），服务端证书默认依据系统 CA 证书库校验。
+- `caCert`：可选的 PEM 证书文件路径。设置后将**取代**系统 CA 库作为校验信任根 —— 用于服务端使用自签证书的场景。
+
+**示例 —— 信任自签的服务端证书：**
+
+```json
+"tls": {
+  "enabled": true,
+  "caCert": "ca.crt"
+}
+```
+
+将服务端证书（或为其签名的 CA 证书）放到指定路径，客户端即可在加密的 `wss://` 连接上完成证书校验。
+
 ## 从源码构建
 
 ### 环境要求
