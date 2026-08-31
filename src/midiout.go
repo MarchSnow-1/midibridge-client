@@ -1,12 +1,13 @@
 package main
 
 import (
-	golog "github.com/donnie4w/go-logger/logger"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	golog "github.com/donnie4w/go-logger/logger"
 	"gitlab.com/gomidi/midi"
 	driver "gitlab.com/gomidi/rtmididrv"
 )
@@ -137,7 +138,7 @@ func (m *MidiOutput) initWindows() error {
 
 	golog.Info(T("virtualMidi.detectedPorts", nil))
 	for i, out := range outs {
-		golog.Info("  [" + itoa(i) + "] " + out.String())
+		golog.Info("  [" + strconv.Itoa(i) + "] " + out.String())
 	}
 
 	idx := findPortByName(outs, m.name)
@@ -153,7 +154,7 @@ func (m *MidiOutput) initWindows() error {
 		return err
 	}
 
-	golog.Info(T("virtualMidi.connected", map[string]string{"index": itoa(idx), "name": m.name}))
+	golog.Info(T("virtualMidi.connected", map[string]string{"index": strconv.Itoa(idx), "name": m.name}))
 	return nil
 }
 
@@ -317,7 +318,7 @@ func midiVerbose(data []byte) string {
 		vel := int(data[2])
 		oct := int(note/12) - 1
 		name := noteNames[note%12]
-		return "CH" + itoa(channel) + " Note Off: " + name + itoa(oct) + " vel=" + itoa(vel)
+		return "CH" + strconv.Itoa(channel) + " Note Off: " + name + strconv.Itoa(oct) + " vel=" + strconv.Itoa(vel)
 
 	case 0x90:
 		if len(data) < 3 {
@@ -328,9 +329,9 @@ func midiVerbose(data []byte) string {
 		oct := int(note/12) - 1
 		name := noteNames[note%12]
 		if vel == 0 {
-			return "CH" + itoa(channel) + " Note Off: " + name + itoa(oct) + " (vel=0)"
+			return "CH" + strconv.Itoa(channel) + " Note Off: " + name + strconv.Itoa(oct) + " (vel=0)"
 		}
-		return "CH" + itoa(channel) + " Note On:  " + name + itoa(oct) + " vel=" + itoa(vel)
+		return "CH" + strconv.Itoa(channel) + " Note On:  " + name + strconv.Itoa(oct) + " vel=" + strconv.Itoa(vel)
 
 	case 0xB0:
 		if len(data) < 3 {
@@ -341,11 +342,11 @@ func midiVerbose(data []byte) string {
 			return ""
 		}
 		val := int(data[2])
-		return "CH" + itoa(channel) + " CC#" + itoa(cc) + " = " + itoa(val)
+		return "CH" + strconv.Itoa(channel) + " CC#" + strconv.Itoa(cc) + " = " + strconv.Itoa(val)
 
 	case 0xC0:
 		prog := int(data[1])
-		return "CH" + itoa(channel) + " Program: " + itoa(prog)
+		return "CH" + strconv.Itoa(channel) + " Program: " + strconv.Itoa(prog)
 
 	case 0xE0:
 		if len(data) < 3 {
@@ -354,7 +355,7 @@ func midiVerbose(data []byte) string {
 		lsb := int(data[1])
 		msb := int(data[2])
 		val := (msb<<7 | lsb) - 8192
-		return "CH" + itoa(channel) + " Pitch: " + itoa(val)
+		return "CH" + strconv.Itoa(channel) + " Pitch: " + strconv.Itoa(val)
 	}
 	return ""
 }

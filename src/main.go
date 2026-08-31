@@ -1,13 +1,15 @@
 package main
 
 import (
-	golog "github.com/donnie4w/go-logger/logger"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
+
+	golog "github.com/donnie4w/go-logger/logger"
 )
 
 var version = "dev"
@@ -40,7 +42,7 @@ func main() {
 
 	initI18N(cfg.Lang)
 
-	golog.Info(T("index.targetServer", map[string]string{"host": cfg.Server.Host, "port": itoa(cfg.Server.Port)}))
+	golog.Info(T("index.targetServer", map[string]string{"host": cfg.Server.Host, "port": strconv.Itoa(cfg.Server.Port)}))
 
 	if cfg.Logging.File {
 		enableFileLogging()
@@ -132,7 +134,7 @@ func main() {
 				}
 			case "disconnected":
 				midiOut.AllNotesOff()
-				golog.Warn(T("index.disconnected", map[string]string{"code": itoa(evt.Code)}))
+				golog.Warn(T("index.disconnected", map[string]string{"code": strconv.Itoa(evt.Code)}))
 			}
 		}
 	}()
