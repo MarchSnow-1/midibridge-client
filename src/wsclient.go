@@ -8,6 +8,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -487,7 +488,7 @@ func (w *WSClient) reconnectWait() {
 
 	w.setState(stateReconnecting)
 	delaySec := fmt.Sprintf("%.1f", delay.Seconds())
-	golog.Info(T("wsClient.reconnecting", map[string]string{"delay": delaySec, "attempt": itoa(count)}))
+	golog.Info(T("wsClient.reconnecting", map[string]string{"delay": delaySec, "attempt": strconv.Itoa(count)}))
 	w.emitStatus(StatusEvent{Type: "reconnecting", Reason: delaySec})
 
 	select {
