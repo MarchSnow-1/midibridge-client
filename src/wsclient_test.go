@@ -31,6 +31,13 @@ func TestValidMidiMessage(t *testing.T) {
 		{"Song Position 3 bytes", []byte{0xF2, 0x00, 0x40}, true},
 		{"Song Position wrong length", []byte{0xF2, 0x00}, false},
 		{"MTC Quarter Frame 2 bytes", []byte{0xF1, 0x00}, true},
+		{"Note On data byte high bit", []byte{0x90, 0x80, 100}, false},
+		{"CC data byte high bit", []byte{0xB0, 7, 0x80}, false},
+		{"Pitch Bend data byte high bit", []byte{0xE0, 0x80, 0x00}, false},
+		{"Program Change data byte high bit", []byte{0xC0, 0x80}, false},
+		{"SysEx data byte high bit", []byte{0xF0, 0x7E, 0x81, 0x06, 0x01, 0xF7}, false},
+		{"MTC data byte high bit", []byte{0xF1, 0x80}, false},
+		{"Song Position data byte high bit", []byte{0xF2, 0x00, 0x81}, false},
 	}
 	for _, c := range cases {
 		if got := validMidiMessage(c.data); got != c.want {

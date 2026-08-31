@@ -347,6 +347,7 @@ func (w *WSClient) stopAuthWatchdog() {
 // 上游应为完整消息（服务端按消息转发），此处只做防御性校验：
 //   - 首字节必须是状态字节（≥0x80）
 //   - 通道消息长度必须与类型匹配
+//   - 所有数据字节必须 <0x80（MIDI 规范：数据字节最高位恒为 0）
 //   - SysEx 必须以 0xF0 开始、0xF7 结束，且不超过大小上限
 //   - 系统实时消息（0xF8-0xFF）恒为 1 字节
 const (
@@ -367,11 +368,12 @@ func validMidiMessage(data []byte) bool {
 	case status >= 0xF0:
 		switch status {
 		case 0xF0: // SysEx：F0 ... F7
-			return len(data) >= 2 && data[len(data)-1] == 0xF7
+			return len(data) >= 2 && data[len(data)-1] == 0xF7 &&
+				validDataBytes(data[1:len(data)-1])
 		case 0xF1, 0xF3: // MTC Quarter Frame, Song Select — 2 字节
-			return len(data) == 2
+			return len(data) == 2 && validDataBytes(data[1:])
 		case 0xF2: // Song Position Pointer — 3 字节
-			return len(data) == 3
+			return len(data) == 3 && validDataBytes(data[1:])
 		case 0xF6, 0xF8, 0xFA, 0xFB, 0xFC, 0xFE, 0xFF: // 单字节实时/通用
 			return len(data) == 1
 		case 0xF4, 0xF5, 0xF7, 0xF9, 0xFD: // 未定义/结束符不应作为首字节
@@ -379,10 +381,21 @@ func validMidiMessage(data []byte) bool {
 		}
 		return false
 	case msgType == 0xC0 || msgType == 0xD0: // Program Change / Channel Pressure — 2 字节
-		return len(data) == 2
+		return len(data) == 2 && validDataBytes(data[1:])
 	default: // 其余通道消息（Note/CC/Pitch Bend）— 3 字节
-		return len(data) == 3
+		return len(data) == 3 && validDataBytes(data[1:])
 	}
+}
+
+// validDataBytes 校验所有数据字节均 <0x80。
+// 状态字节以 0x80+ 区分，放行高位置位的数据字节会让畸形消息直达本地 MIDI 驱动。
+func validDataBytes(data []byte) bool {
+	for _, b := range data {
+		if b >= 0x80 {
+			return false
+		}
+	}
+	return true
 }
 
 func (w *WSClient) handleMessage(raw []byte) string {
