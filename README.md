@@ -23,10 +23,7 @@ Receive MIDI signals from MIDIBridge Server over the network and inject them int
 
 ### Requirements
 
-| Dependency | Notes |
-|------------|-------|
-| Go | ≥ 1.23 |
-
+None for the prebuilt binary — just download and run. Go ≥ 1.26 is only needed if you [build from source](#build-from-source).
 
 > [!IMPORTANT]
 > Windows MM API does not support programmatic virtual MIDI port creation.<br>
@@ -39,11 +36,11 @@ Download the binary for your platform from [Releases](https://github.com/MarchSn
 ./midibridge-client
 ```
 
-> The client auto-generates `data/config.json` on first run. Edit it to set your server IP and password.
+> The client auto-generates `data/config.json` next to the executable on first run. Edit it to set your server IP and password.
 
 ## Configuration
 
-File: `data/config.json`. Auto-generated on first run. Edit before starting.
+File: `data/config.json` inside the directory containing the executable. The path is anchored to the executable's own location — not the current working directory — so the client always reads and writes the same config no matter where it is launched from. Auto-generated on first run. Edit before starting.
 
 ```json
 {
@@ -65,7 +62,12 @@ File: `data/config.json`. Auto-generated on first run. Edit before starting.
     "maxAttempts": 0
   },
   "logging": {
-    "file": false
+    "file": false,
+    "midiVerbose": false
+  },
+  "tls": {
+    "enabled": false,
+    "caCert": ""
   }
 }
 ```
@@ -95,6 +97,8 @@ Set to `"en"` (default) or `"zh-CN"`. Controls the language of all log output. C
 
 On macOS / Linux the port is created automatically. On Windows, create a port with the same name in loopMIDI first.
 
+Port name matching is substring-based, not exact: the client picks the **first** output port whose name *contains* the configured `virtualPortName` (`strings.Contains`). For example, a configured name of `"Bridge"` matches ports like `"MIDIBridge"` or `"My Bridge"`.
+
 **Reconnect behavior:**
 
 ```json
@@ -115,7 +119,29 @@ On macOS / Linux the port is created automatically. On Windows, create a port wi
 "midi": { "reconnectOnKick": true }
 ```
 
-When `false`, the client exits after being kicked (e.g. after a password change). When `true`, it logs a warning and stays idle — update your password and restart.
+Controls what happens after being kicked by the server (e.g. the password was changed, or the connection was taken over by another client):
+
+- `false`: the client sends All Notes Off, then the process exits.
+- `true` (default): the client keeps running and reconnects automatically according to the `reconnect` settings (`enabled`, `intervalMs`, `maxAttempts`).
+
+**Verbose MIDI logging:**
+
+```json
+"logging": { "midiVerbose": false }
+```
+
+When `true`, every incoming MIDI event is logged at INFO level. Active MIDI streams produce a lot of log output — enable only when debugging.
+
+**TLS (encrypted connection):**
+
+```json
+"tls": { "enabled": true, "caCert": "" }
+```
+
+When `enabled`, the client connects via `wss://`. See [Security](#security) for details and a self-signed certificate example.
+
+> [!NOTE]
+> **CC#120 / CC#123 are handled locally.** The client tracks held notes per channel and sends All Notes Off itself (on disconnect, kick, and shutdown). All Sound Off (`CC#120`) and All Notes Off (`CC#123`) messages received from the server are silently filtered and never forwarded to the virtual port.
 
 ### Configuration Priority
 
@@ -132,6 +158,11 @@ Higher priority overrides lower:
 ./midibridge-client --host 192.168.1.100 --port 9001 --password mypass --port-name "My Bridge" --lang zh-CN
 ```
 
+`--version` / `-v` prints the client version and exits.
+
+> [!WARNING]
+> Passing the password via `--password` exposes it in the process list and shell history. Prefer `data/config.json` — see [Security](#security).
+
 **Environment variables:**
 
 | Variable | Maps to |
@@ -142,13 +173,46 @@ Higher priority overrides lower:
 | `MIDIBRIDGE_PASSWORD` | `auth.password` |
 | `MIDIBRIDGE_PORT_NAME` | `midi.virtualPortName` |
 
+## Security
+
+Read this section before running the client outside a network you fully trust.
+
+- **The connection is plaintext by default.** Unless TLS is enabled, the client connects over `ws://`, and everything — including the password — travels unencrypted over the network. Use the default mode only on trusted networks, or enable TLS.
+- **The password is stored in plaintext** in `data/config.json` (created with `0600` permissions — readable by the file owner only) and, without TLS, it is also transmitted in cleartext during authentication.
+- **Prefer the config file over `--password`.** Command-line arguments are visible in the process list and shell history. The client prints a security warning whenever `--password` is used.
+
+### Enabling TLS
+
+Set `tls.enabled` to `true` to connect over `wss://` instead:
+
+```json
+"tls": {
+  "enabled": true,
+  "caCert": ""
+}
+```
+
+- `enabled`: connect via `wss://` (TLS ≥ 1.2). The server certificate is verified against the system CA store.
+- `caCert`: optional path to a PEM certificate file. When set, it **replaces** the system CA store as the trust root for verification — intended for servers that use self-signed certificates.
+
+**Example — trusting a self-signed server certificate:**
+
+```json
+"tls": {
+  "enabled": true,
+  "caCert": "ca.crt"
+}
+```
+
+Put the server's certificate (or the CA certificate that signed it) at the configured path, and the client will verify the server against it over an encrypted `wss://` connection.
+
 ## Build from Source
 
 ### Requirements
 
 | Dependency | Notes |
 |------------|-------|
-| Go | ≥ 1.22 |
+| Go | ≥ 1.26 |
 | GCC | Required for CGO (RtMidi linking) |
 
 ### Build & Run
