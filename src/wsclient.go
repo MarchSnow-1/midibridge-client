@@ -249,6 +249,10 @@ func (w *WSClient) connectLoop() {
 		reason := <-w.readDone
 		w.closeConn()
 
+		// 排空旧会话积压事件：带着过时 DeltaMs 的旧事件在新连接建立后
+		// 迟到重放会造成时序错乱（配对的 Note Off 可能已被丢弃导致卡音）
+		w.drainMidiChan()
+
 		if reason == "failed" {
 			w.setState(stateFailed)
 			return
@@ -261,6 +265,22 @@ func (w *WSClient) connectLoop() {
 
 		w.reconnectWait()
 		if w.isStopped() {
+			return
+		}
+	}
+}
+
+// drainMidiChan 非阻塞地丢弃 MidiChan 中积压的旧会话事件。
+func (w *WSClient) drainMidiChan() {
+	dropped := 0
+	for {
+		select {
+		case <-w.MidiChan:
+			dropped++
+		default:
+			if dropped > 0 {
+				golog.Info(fmt.Sprintf("Discarded %d stale MIDI event(s) from previous session", dropped))
+			}
 			return
 		}
 	}
