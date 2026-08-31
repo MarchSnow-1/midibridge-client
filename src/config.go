@@ -130,6 +130,21 @@ func loadConfig(configPath string) (*ClientConfig, error) {
 	return &cfg, nil
 }
 
+// subKeys 从 rawKeys 中提取指定顶层键的子键集合。
+// 用于字段级合并：仅当用户显式写了某个子键时才覆盖它，
+// 避免"只写一项、其余被重置为零值"的整对象覆盖陷阱。
+func subKeys(rawKeys map[string]json.RawMessage, key string) map[string]json.RawMessage {
+	raw, ok := rawKeys[key]
+	if !ok {
+		return nil
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil
+	}
+	return m
+}
+
 func mergeFile(dst, src *ClientConfig, rawKeys map[string]json.RawMessage) {
 	if src.Lang != "" {
 		dst.Lang = src.Lang
@@ -146,17 +161,41 @@ func mergeFile(dst, src *ClientConfig, rawKeys map[string]json.RawMessage) {
 	if src.MIDI.VirtualPortName != "" {
 		dst.MIDI.VirtualPortName = src.MIDI.VirtualPortName
 	}
-	if _, ok := rawKeys["midi"]; ok {
-		dst.MIDI.ReconnectOnKick = src.MIDI.ReconnectOnKick
+
+	// 字段级合并：嵌套对象仅覆盖用户显式写出的子键。
+	// 旧行为（整对象覆盖）会让"只写 reconnect.intervalMs"的用户
+	// 意外丢失 reconnect.enabled 等其余配置。
+	if midiKeys := subKeys(rawKeys, "midi"); midiKeys != nil {
+		if _, ok := midiKeys["reconnectOnKick"]; ok {
+			dst.MIDI.ReconnectOnKick = src.MIDI.ReconnectOnKick
+		}
 	}
-	if _, ok := rawKeys["reconnect"]; ok {
-		dst.Reconnect = src.Reconnect
+	if reconnectKeys := subKeys(rawKeys, "reconnect"); reconnectKeys != nil {
+		if _, ok := reconnectKeys["enabled"]; ok {
+			dst.Reconnect.Enabled = src.Reconnect.Enabled
+		}
+		if _, ok := reconnectKeys["intervalMs"]; ok {
+			dst.Reconnect.IntervalMs = src.Reconnect.IntervalMs
+		}
+		if _, ok := reconnectKeys["maxAttempts"]; ok {
+			dst.Reconnect.MaxAttempts = src.Reconnect.MaxAttempts
+		}
 	}
-	if _, ok := rawKeys["logging"]; ok {
-		dst.Logging = src.Logging
+	if loggingKeys := subKeys(rawKeys, "logging"); loggingKeys != nil {
+		if _, ok := loggingKeys["file"]; ok {
+			dst.Logging.File = src.Logging.File
+		}
+		if _, ok := loggingKeys["midiVerbose"]; ok {
+			dst.Logging.MidiVerbose = src.Logging.MidiVerbose
+		}
 	}
-	if _, ok := rawKeys["tls"]; ok {
-		dst.TLS = src.TLS
+	if tlsKeys := subKeys(rawKeys, "tls"); tlsKeys != nil {
+		if _, ok := tlsKeys["enabled"]; ok {
+			dst.TLS.Enabled = src.TLS.Enabled
+		}
+		if _, ok := tlsKeys["caCert"]; ok {
+			dst.TLS.CACert = src.TLS.CACert
+		}
 	}
 }
 
