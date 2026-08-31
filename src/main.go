@@ -135,6 +135,12 @@ func main() {
 			case "disconnected":
 				midiOut.AllNotesOff()
 				golog.Warn(T("index.disconnected", map[string]string{"code": strconv.Itoa(evt.Code)}))
+			case "reconnecting":
+				// 重连进度已由 wsclient 在 reconnectWait 中记录，此处无需重复
+			case "max_reconnects":
+				// 达到最大重连次数：wsclient 已停止重试，进程保持存活等待用户处理
+				midiOut.AllNotesOff()
+				golog.Error(T("wsClient.maxReconnects", map[string]string{"max": strconv.Itoa(cfg.Reconnect.MaxAttempts)}))
 			}
 		}
 	}()
