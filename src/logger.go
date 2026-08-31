@@ -67,6 +67,14 @@ func canWriteToLogsDir() bool {
 	}
 	f.Close()
 	os.Remove(probe)
+	// 追加模式打开真实日志文件：目录可写但既有日志文件只读时，
+	// go-logger 打开仍会失败并触发"一次失败、全部日志永久静默"陷阱。
+	logFile := filepath.Join(dir, "client.log")
+	f, err = os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return false
+	}
+	f.Close()
 	return true
 }
 
