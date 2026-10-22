@@ -223,16 +223,16 @@ Windows
 ```bash
 # 获取源代码
 git clone https://github.com/MarchSnow-1/midibridge-client.git
-cd midibridge-client
+cd midibridge-client/src
 
 # 拉取依赖
 go mod tidy
 
 # 编译
-go build -o dist/midibridge-client.exe ./src/
+go build -o ../dist/midibridge-client.exe .
 
 # 运行
-./dist/midibridge-client.exe
+../dist/midibridge-client.exe
 ```
 
 Linux / macOS
@@ -240,16 +240,16 @@ Linux / macOS
 ```bash
 # 获取源代码
 git clone https://github.com/MarchSnow-1/midibridge-client.git
-cd midibridge-client
+cd midibridge-client/src
 
 # 拉取依赖
 go mod tidy
 
 # 编译
-go build -o dist/midibridge-client ./src/
+go build -o ../dist/midibridge-client .
 
 # 运行
-./dist/midibridge-client
+../dist/midibridge-client
 ```
 
 ## 许可证

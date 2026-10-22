@@ -222,16 +222,16 @@ Windows
 ```bash
 # Clone the repo
 git clone https://github.com/MarchSnow-1/midibridge-client.git
-cd midibridge-client
+cd midibridge-client/src
 
 # Pull dependencies
 go mod tidy
 
 # Build
-go build -o dist/midibridge-client.exe ./src/
+go build -o ../dist/midibridge-client.exe .
 
 # Run
-./dist/midibridge-client.exe
+../dist/midibridge-client.exe
 ```
 
 Linux / macOS
@@ -239,16 +239,16 @@ Linux / macOS
 ```bash
 # Clone the repo
 git clone https://github.com/MarchSnow-1/midibridge-client.git
-cd midibridge-client
+cd midibridge-client/src
 
 # Pull dependencies
 go mod tidy
 
 # Build
-go build -o dist/midibridge-client ./src/
+go build -o ../dist/midibridge-client .
 
 # Run
-./dist/midibridge-client
+../dist/midibridge-client
 ```
 
 ## License

@@ -2,16 +2,16 @@ VERSION ?= $(shell git describe --tags --always --long --dirty 2>/dev/null || ec
 LDFLAGS := -X main.version=$(VERSION)
 
 ifeq ($(OS),Windows_NT)
-	BIN := dist/midibridge-client.exe
+	BIN := ../dist/midibridge-client.exe
 else
-	BIN := dist/midibridge-client
+	BIN := ../dist/midibridge-client
 endif
 
 build:
-	CGO_ENABLED=1 go build -ldflags "$(LDFLAGS)" -o $(BIN) ./src/
+	CGO_ENABLED=1 go build -ldflags "$(LDFLAGS)" -o $(BIN) .
 
 version:
 	@echo $(VERSION)
 
 clean:
-	rm -rf dist/
+	rm -rf ../dist/
