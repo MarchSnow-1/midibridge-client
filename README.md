@@ -6,8 +6,8 @@ Receive MIDI signals from MIDIBridge Server over the network and inject them int
 
 <!-- Badges -->
 
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-blue?style=for-the-badge)](https://github.com/MarchSnow-1/midibridge-client)
-[![Golang](https://img.shields.io/badge/Golang-1.26%2B-green?style=for-the-badge)](https://go.dev)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%2013%2B%20%7C%20Linux-blue?style=for-the-badge)](https://github.com/MarchSnow-1/midibridge-client)
+[![Golang](https://img.shields.io/badge/Golang-1.27.3%2B-green?style=for-the-badge)](https://go.dev)
 [![License](https://img.shields.io/badge/License-MIT-orange?style=for-the-badge)](LICENSE)
 <br>
 [![GitHub Release](https://img.shields.io/github/v/release/MarchSnow-1/midibridge-client?style=for-the-badge)](https://github.com/MarchSnow-1/midibridge-client/releases)
