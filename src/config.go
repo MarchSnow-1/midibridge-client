@@ -17,6 +17,7 @@ type ClientConfig struct {
 	Reconnect ReconnectConfig `json:"reconnect"`
 	Logging   LoggingConfig   `json:"logging"`
 	TLS       TLSConfig       `json:"tls"`
+	IPC       IPCConfig       `json:"ipc"`
 }
 
 type ServerConfig struct {
@@ -36,8 +37,28 @@ type TLSConfig struct {
 }
 
 type MIDIConfig struct {
+	// Enabled 控制是否初始化虚拟 MIDI 输出端口，默认 true 与引入 IPC 之前的行为一致
+	// 纯 IPC 模式只把数据流给其他进程而不注入虚拟端口，此时可设为 false，无需安装 loopMIDI 等虚拟端口驱动
+	//
+	// Enabled controls whether the virtual MIDI output port is initialised; it defaults to true, matching the behaviour before IPC existed
+	// In IPC-only mode the stream goes to other processes and no virtual port is injected, so this can be false and no loopMIDI-style driver is needed
+	Enabled         bool   `json:"enabled"`
 	VirtualPortName string `json:"virtualPortName"`
 	ReconnectOnKick bool   `json:"reconnectOnKick"`
+}
+
+// IPCConfig 面向其他进程的只读 TCP 数据通道
+// 为空表示不启用，此时行为与未引入该功能时一致
+//
+// IPCConfig is the read-only TCP data channel for other processes
+// An empty value disables it, and the client then behaves as it did before the feature existed
+type IPCConfig struct {
+	// Listen 是监听地址，如 127.0.0.1:9003，端口可写 0 由系统分配
+	// 地址由使用者选择，绑定非回环地址时 client 记录安全警告，原因是该接口没有鉴权
+	//
+	// Listen is the bind address such as 127.0.0.1:9003, and the port may be 0 for the OS to choose
+	// The address is the user's choice; binding a non-loopback address logs a security warning because the interface has no authentication
+	Listen string `json:"listen"`
 }
 
 type ReconnectConfig struct {
@@ -62,6 +83,8 @@ func defaultConfig() ClientConfig {
 			Password: "",
 		},
 		MIDI: MIDIConfig{
+			// 默认启用：保持引入 IPC 之前的行为，普通用户升级后零感知。
+			Enabled:         true,
 			VirtualPortName: "MIDIBridge",
 			ReconnectOnKick: true,
 		},
@@ -77,6 +100,10 @@ func defaultConfig() ClientConfig {
 		TLS: TLSConfig{
 			Enabled: false,
 			CACert:  "",
+		},
+		IPC: IPCConfig{
+			// 默认不启用：不传 -ipc-listen 时不监听任何端口。
+			Listen: "",
 		},
 	}
 }
@@ -114,6 +141,8 @@ func loadConfig(configPath string) (*ClientConfig, error) {
 	flag.IntVar(&cfg.Server.Port, "port", cfg.Server.Port, "Server port")
 	flag.StringVar(&cfg.Auth.Password, "password", cfg.Auth.Password, "Auth password")
 	flag.StringVar(&cfg.MIDI.VirtualPortName, "port-name", cfg.MIDI.VirtualPortName, "Virtual MIDI port name")
+	flag.StringVar(&cfg.IPC.Listen, "ipc-listen", cfg.IPC.Listen, "Expose the MIDI stream to local processes over TCP (loopback only, e.g. 127.0.0.1:9003; empty disables)")
+	flag.BoolVar(&cfg.MIDI.Enabled, "midi", cfg.MIDI.Enabled, "Initialize the virtual MIDI output port (disable for IPC-only mode)")
 	flag.Parse()
 
 	// 安全提示：命令行参数在进程列表与 shell 历史中可见
@@ -179,6 +208,11 @@ func mergeFile(dst, src *ClientConfig, rawKeys map[string]json.RawMessage) {
 	// 旧行为（整对象覆盖）会让"只写 reconnect.intervalMs"的用户
 	// 意外丢失 reconnect.enabled 等其余配置。
 	if midiKeys := subKeys(rawKeys, "midi"); midiKeys != nil {
+		// Enabled 必须按存在性判断：默认值为 true，若直接比较布尔值，
+		// 用户显式写 false 会被零值语义吞掉而永远无法关闭。
+		if _, ok := midiKeys["enabled"]; ok {
+			dst.MIDI.Enabled = src.MIDI.Enabled
+		}
 		if _, ok := midiKeys["reconnectOnKick"]; ok {
 			dst.MIDI.ReconnectOnKick = src.MIDI.ReconnectOnKick
 		}
@@ -210,6 +244,13 @@ func mergeFile(dst, src *ClientConfig, rawKeys map[string]json.RawMessage) {
 			dst.TLS.CACert = src.TLS.CACert
 		}
 	}
+	if ipcKeys := subKeys(rawKeys, "ipc"); ipcKeys != nil {
+		// 同样按存在性判断：Listen 的清空是有意义的状态（关闭 IPC），
+		// 若用 !="" 判断，用户无法通过写空串关闭它。
+		if _, ok := ipcKeys["listen"]; ok {
+			dst.IPC.Listen = src.IPC.Listen
+		}
+	}
 }
 
 func mergeEnv(cfg *ClientConfig) {
@@ -231,6 +272,14 @@ func mergeEnv(cfg *ClientConfig) {
 	}
 	if v := os.Getenv("MIDIBRIDGE_PORT_NAME"); v != "" {
 		cfg.MIDI.VirtualPortName = v
+	}
+	if v := os.Getenv("MIDIBRIDGE_IPC_LISTEN"); v != "" {
+		cfg.IPC.Listen = v
+	}
+	if v := os.Getenv("MIDIBRIDGE_MIDI_ENABLED"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			cfg.MIDI.Enabled = b
+		}
 	}
 }
 

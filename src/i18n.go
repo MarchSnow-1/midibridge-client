@@ -52,6 +52,16 @@ var enStrings = map[string]string{
 	"virtualMidi.notInit":           "MIDI port not initialized, cannot send message",
 	"virtualMidi.sendFailed":        "Failed to send MIDI message: {error}",
 	"virtualMidi.closed":            "MIDI port closed: \"{name}\"",
+
+	// IPC 条目只保留由 main.go 渲染的部分，ipc.go 内部的运行时日志保留英文字面量
+	// 原因是丢弃告警在热路径上按 MIDI 速率触发，逐帧调用 T() 会带来 map 查找与字符串替换开销
+	//
+	// Only the IPC entries rendered by main.go live here; the runtime logs inside ipc.go stay as English literals
+	// The drop warning fires on the hot path at MIDI rates, so calling T() per frame would add map lookups and string replacement
+	"ipc.nonLoopback":           "IPC listen address rejected: {error}",
+	"ipc.listenFailed":          "IPC listen failed: {error}",
+	"midi.disabled":             "Virtual MIDI output disabled (midi.enabled=false)",
+	"midi.initFailedContinuing": "MIDI init failed: {error} — continuing in IPC-only mode",
 }
 
 var zhCNStrings = map[string]string{
@@ -99,6 +109,14 @@ var zhCNStrings = map[string]string{
 	"virtualMidi.notInit":           "MIDI 端口未初始化，无法发送消息",
 	"virtualMidi.sendFailed":        "MIDI 消息发送失败: {error}",
 	"virtualMidi.closed":            "MIDI 端口已关闭: \"{name}\"",
+
+	// IPC 条目与 enStrings 保持同一组键，取舍原因见英文侧的说明
+	//
+	// The IPC entries mirror the same key set as enStrings; see the English note for why only these are translated
+	"ipc.nonLoopback":           "IPC 监听地址被拒绝: {error}",
+	"ipc.listenFailed":          "IPC 监听失败: {error}",
+	"midi.disabled":             "虚拟 MIDI 输出已禁用（midi.enabled=false）",
+	"midi.initFailedContinuing": "MIDI 初始化失败: {error} —— 继续以纯 IPC 模式运行",
 }
 
 // normalizeLang 将语言标识归一化：小写、下划线转连字符。

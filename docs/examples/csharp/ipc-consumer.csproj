@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    C# IPC 消费端示例的构建文件
+    顶层语句程序需要工程文件，因此本目录附带此文件，示例本身的代码都在 Program.cs 中
+    运行方式 dotnet run
+
+    Build file for the C# IPC consumer example
+    A top-level-statements program needs a project file, so this folder ships one, while the example code itself lives entirely in Program.cs
+    Run with dotnet run
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- 需要 .NET 6 及以上 -->
+    <!-- .NET 6 or later is required -->
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>midibridge-ipc-csharp</AssemblyName>
+    <RootNamespace>MidibridgeIpc</RootNamespace>
+  </PropertyGroup>
+
+</Project>

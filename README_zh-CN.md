@@ -54,7 +54,11 @@
   },
   "midi": {
     "virtualPortName": "MIDIBridge",
-    "reconnectOnKick": true
+    "reconnectOnKick": true,
+    "enabled": true
+  },
+  "ipc": {
+    "listen": ""
   },
   "reconnect": {
     "enabled": true,
@@ -125,6 +129,26 @@ macOS / Linux 下虚拟端口会自动创建。Windows 下需先在 loopMIDI 中
 - `false`：客户端发送 All Notes Off 后进程直接退出
 - `true`（默认）：客户端保持运行，并按 `reconnect` 配置（`enabled` / `intervalMs` / `maxAttempts`）自动重连
 
+**虚拟 MIDI 端口开关：**
+
+```json
+"midi": { "enabled": true }
+```
+
+- `true`（默认）：按上文说明打开虚拟 MIDI 端口，这是常规用法，行为不变
+- `false`：完全跳过虚拟 MIDI 端口。适用于仅通过下文「外部接入」为其他程序提供数据、DAW 不需要 MIDI 端口的场景
+
+**外部接入（IPC）：**
+
+```json
+"ipc": { "listen": "" }
+```
+
+- `""`（默认）：**不启用**外部接入，常规使用完全不受影响
+- `"127.0.0.1:9003"`：额外把同一份 MIDI 流通过本机 TCP 回环套接字发布出去，其他程序可直接读取。填写 `"127.0.0.1:0"` 可让系统自动分配空闲端口，实际地址会在启动日志中打印
+
+协议细节与开箱即用的接入示例见[外部接入](#外部接入)一节
+
 **MIDI 详细日志：**
 
 ```json
@@ -173,6 +197,51 @@ macOS / Linux 下虚拟端口会自动创建。Windows 下需先在 loopMIDI 中
 | `MIDIBRIDGE_PORT` | `server.port` |
 | `MIDIBRIDGE_PASSWORD` | `auth.password` |
 | `MIDIBRIDGE_PORT_NAME` | `midi.virtualPortName` |
+| `MIDIBRIDGE_IPC_LISTEN` | `ipc.listen` |
+| `MIDIBRIDGE_MIDI_ENABLED` | `midi.enabled` |
+
+## 外部接入
+
+**此为可选功能，默认关闭** 不设置 `ipc.listen` 时，本节内容与你的使用完全无关，上文的虚拟 MIDI 端口用法完全不受影响
+
+启用后，客户端会在继续输出到虚拟端口的同时，把同一份 MIDI 流通过 TCP 套接字发布出去
+
+其他程序即可直接读取 MIDI 数据，无需虚拟 MIDI 端口
+
+```bash
+# 除虚拟 MIDI 端口外，额外在 127.0.0.1:9003 发布 MIDI
+midibridge-client -ipc-listen 127.0.0.1:9003
+
+# 让系统自动分配空闲端口（启动日志中会打印实际地址）
+midibridge-client -ipc-listen 127.0.0.1:0
+
+# 仅服务外部程序，不创建虚拟 MIDI 端口
+midibridge-client -ipc-listen 127.0.0.1:9003 -midi=false
+```
+
+监听地址由传参指定，绑定回环地址时只有本机进程能访问，绑定 `0.0.0.0` 或某个网卡地址时其他机器也能读取这条流
+
+接口特性：
+
+- **只读** 客户端从不读取接入方的数据，只单向写出 MIDI 流
+- **无鉴权** 能访问到端口的进程均可连接，因此绑定非回环地址时客户端会记录警告并在监听日志中标注
+- **明文** 回环绑定下流量不出本机，跨网络传输的机密性需要在下层自行处理
+- **不保证投递** 消费过慢会丢帧，详见协议文档
+
+与虚拟端口路径不同，IPC 转发**不受**客户端内部节流限制，接入方会在消息到达时立即收到
+
+已提供开箱即用的接入示例，无需任何第三方依赖：
+
+- C#
+- Node.js
+- TypeScript
+- Go
+- C++
+- Python
+- Java
+- Rust
+
+完整协议规范与全部示例见 [`docs/PROTOCOL_zh-CN.md`](docs/PROTOCOL_zh-CN.md)
 
 ## 安全说明
 

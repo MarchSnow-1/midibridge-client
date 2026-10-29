@@ -54,7 +54,11 @@ File: `data/config.json` inside the directory containing the executable. The pat
   },
   "midi": {
     "virtualPortName": "MIDIBridge",
-    "reconnectOnKick": true
+    "reconnectOnKick": true,
+    "enabled": true
+  },
+  "ipc": {
+    "listen": ""
   },
   "reconnect": {
     "enabled": true,
@@ -124,6 +128,26 @@ Controls what happens after being kicked by the server (e.g. the password was ch
 - `false`: the client sends All Notes Off, then the process exits.
 - `true` (default): the client keeps running and reconnects automatically according to the `reconnect` settings (`enabled`, `intervalMs`, `maxAttempts`).
 
+**Virtual MIDI port on/off:**
+
+```json
+"midi": { "enabled": true }
+```
+
+- `true` (default): the client opens the virtual MIDI port as described above. This is the normal mode and is unchanged.
+- `false`: skip the virtual MIDI port entirely. Useful when the client is only serving external programs over the IPC interface described in [External integration](#external-integration), and no DAW needs a MIDI port.
+
+**External integration (IPC):**
+
+```json
+"ipc": { "listen": "" }
+```
+
+- `""` (default): the IPC interface is **disabled**. Nothing changes for normal use.
+- `"127.0.0.1:9003"`: additionally publish the same MIDI stream over a local TCP loopback socket so other programs can read it directly. Use `"127.0.0.1:0"` to let the OS pick a free port; the actual address is printed to the log at startup.
+
+See [External integration](#external-integration) for the protocol and ready-to-run client examples.
+
 **Verbose MIDI logging:**
 
 ```json
@@ -172,6 +196,49 @@ Higher priority overrides lower:
 | `MIDIBRIDGE_PORT` | `server.port` |
 | `MIDIBRIDGE_PASSWORD` | `auth.password` |
 | `MIDIBRIDGE_PORT_NAME` | `midi.virtualPortName` |
+| `MIDIBRIDGE_IPC_LISTEN` | `ipc.listen` |
+| `MIDIBRIDGE_MIDI_ENABLED` | `midi.enabled` |
+
+## External integration
+
+**This is an optional, opt-in feature.** It is disabled by default and does not affect the normal virtual-MIDI-port workflow described above — if you never set `ipc.listen`, nothing here applies to you.
+
+With IPC enabled, the client publishes the *same* MIDI stream it sends to the virtual port over a TCP socket. Other programs can then read the MIDI data directly, without a virtual MIDI port and without a DAW.
+
+```bash
+# Publish MIDI on 127.0.0.1:9003 in addition to the virtual MIDI port
+midibridge-client -ipc-listen 127.0.0.1:9003
+
+# Let the OS pick a free port (printed to the log at startup)
+midibridge-client -ipc-listen 127.0.0.1:0
+
+# Serve external programs only — no virtual MIDI port
+midibridge-client -ipc-listen 127.0.0.1:9003 -midi=false
+```
+
+The bind address is your choice: a loopback address keeps the stream reachable from this machine only, while `0.0.0.0` or an interface address also exposes it to other machines.
+
+Interface characteristics:
+
+- **Read-only.** The client never reads from IPC consumers; it only writes the MIDI stream.
+- **No authentication.** Any process that can reach the port may connect, so binding a non-loopback address makes the client log a warning and mark the listener line accordingly.
+- **Plaintext.** Under a loopback bind traffic stays on the machine; handle confidentiality at a lower layer for anything crossing a network.
+- **No delivery guarantee.** A consumer that falls behind drops frames; see the protocol document for details.
+
+Unlike the virtual port path, IPC delivery is **not** rate-limited by the client's internal pacing, so consumers see messages as soon as they arrive.
+
+Supported examples — copy-paste ready, no third-party dependencies:
+
+- C#
+- Node.js
+- TypeScript
+- Go
+- C++
+- Python
+- Java
+- Rust
+
+Full protocol specification and all examples: [`docs/PROTOCOL.md`](docs/PROTOCOL.md).
 
 ## Security
 
