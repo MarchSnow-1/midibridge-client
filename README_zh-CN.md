@@ -243,6 +243,12 @@ midibridge-client -ipc-listen 127.0.0.1:9003 -midi=false
 
 完整协议规范与全部示例见 [`docs/PROTOCOL_zh-CN.md`](docs/PROTOCOL_zh-CN.md)
 
+每次发布与每次 dev 构建还会附带一份 `version.json` 清单
+
+其中列出了程序版本、ipc 协议版本以及各平台压缩包的大小与 SHA-256，使外部程序无需下载即可判断是否安装某个构建
+
+字段说明与判断规则见 [`docs/version-manifest_zh-CN.md`](docs/version-manifest_zh-CN.md)
+
 ## 安全说明
 
 在非完全可信的网络中运行客户端之前，请先阅读本节

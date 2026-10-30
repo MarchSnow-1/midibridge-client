@@ -240,6 +240,12 @@ Supported examples — copy-paste ready, no third-party dependencies:
 
 Full protocol specification and all examples: [`docs/PROTOCOL.md`](docs/PROTOCOL.md).
 
+Every release and dev build also ships a `version.json` manifest
+
+It lists the program version, the ipc protocol version, and the size and SHA-256 of each platform archive, so a program can decide whether to install a build without downloading it first
+
+Field reference and decision rules: [`docs/version-manifest.md`](docs/version-manifest.md)
+
 ## Security
 
 Read this section before running the client outside a network you fully trust.

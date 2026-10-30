@@ -311,8 +311,8 @@ func TestIPCHelloFrameIsFirst(t *testing.T) {
 	if hello.Type != "hello" {
 		t.Fatalf("hello.Type = %q, want \"hello\"", hello.Type)
 	}
-	if hello.Proto != ipcProtoVersion {
-		t.Fatalf("hello.Proto = %q, want %q", hello.Proto, ipcProtoVersion)
+	if hello.Proto != IPCOProtoVersion {
+		t.Fatalf("hello.Proto = %q, want %q", hello.Proto, IPCOProtoVersion)
 	}
 	if hello.Client != ipcClientName {
 		t.Fatalf("hello.Client = %q, want %q", hello.Client, ipcClientName)

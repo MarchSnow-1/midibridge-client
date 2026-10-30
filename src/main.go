@@ -12,12 +12,26 @@ import (
 	golog "github.com/donnie4w/go-logger/logger"
 )
 
+// 版本参数处理说明
+// --version 打印两行，第一行格式与引入协议版本报告之前保持一致，第二行追加协议版本便于人读
+// --ipc-protocol 只打印协议版本单行，供发布流程与脚本直接取值，无需解析多行输出
+// 两者都取自同一常量 IPCOProtoVersion，因此清单与握手帧不会报告出不同的协议版本
+//
+// Version flag behaviour
+// --version prints two lines, where the first keeps the format used before protocol reporting existed and the second adds the protocol version for humans
+// --ipc-protocol prints the protocol version alone on one line so release tooling and scripts can read it without parsing multi-line output
+// Both read the same IPCOProtoVersion constant, so the manifest and the handshake frame cannot report different protocol versions
 var version = "dev"
 
 func main() {
 	for _, arg := range os.Args[1:] {
 		if arg == "--version" || arg == "-v" {
 			fmt.Println("midibridge-client", version)
+			fmt.Println("ipc-protocol", IPCOProtoVersion)
+			return
+		}
+		if arg == "--ipc-protocol" {
+			fmt.Println(IPCOProtoVersion)
 			return
 		}
 	}

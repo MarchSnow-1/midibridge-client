@@ -44,9 +44,12 @@ const (
 	// ipcClientName 握手帧中报告的实现名
 	// ipcClientName is the implementation name reported in the handshake frame
 	ipcClientName = "midibridge-client"
-	// ipcProtoVersion 协议版本，遵循语义化版本，消费者据此判断兼容性
-	// ipcProtoVersion is the protocol version in semantic form, which consumers use to judge compatibility
-	ipcProtoVersion = "1.0.0"
+	// IPCOProtoVersion 协议版本，遵循语义化版本，消费者据此判断兼容性
+	// 导出是为了让 main 包在 --version 与 --ipc-protocol 中报告同一份值，发布清单也从这里取，避免两处漂移
+	//
+	// IPCOProtoVersion is the protocol version in semantic form, which consumers use to judge compatibility
+	// It is exported so the main package reports the same value through --version and --ipc-protocol, and so the release manifest reads it from one place instead of drifting
+	IPCOProtoVersion = "1.0.0"
 )
 
 // ipcHello 是连接建立后立即发送的控制帧 body
@@ -233,7 +236,7 @@ func NewIPCServer(addr, version string) (*IPCServer, error) {
 
 	helloBody, err := json.Marshal(ipcHello{
 		Type:    "hello",
-		Proto:   ipcProtoVersion,
+		Proto:   IPCOProtoVersion,
 		Client:  ipcClientName,
 		Version: version,
 	})
