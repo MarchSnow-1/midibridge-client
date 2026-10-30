@@ -192,3 +192,58 @@ jobs:
           files: MIDIBridge-Client-${{ github.ref_name }}-${{ matrix.platform }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  manifest:
+    # 等全部平台产物上传完成后生成清单，平台失败时仍执行，缺失平台记入 warnings
+    #
+    # Runs after every platform artifact is uploaded, keeps running when a platform fails, and records missing platforms under warnings
+    needs: build
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: src/go.mod
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p assets
+          if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "::error::release ${GITHUB_REF_NAME} not found; manifest cannot be generated"
+            exit 1
+          fi
+          gh release download "${GITHUB_REF_NAME}" --pattern '*.zip' --dir assets
+          ls -l assets
+
+      - name: Generate version.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          go build -o /tmp/midibridge-client ./src
+          IPC_PROTO="$(/tmp/midibridge-client --ipc-protocol)"
+          python3 .github/scripts/gen_version_manifest.py \
+            --channel release \
+            --version "${GITHUB_REF_NAME}" \
+            --ipc-protocol "${IPC_PROTO}" \
+            --assets-dir assets \
+            --out version.json
+          cat version.json
+
+      - name: Upload manifest to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # 只追加单个文件，不触碰既有 asset，避免与 matrix 的并发上传冲突
+          # Upload the single file only, leaving existing assets untouched and avoiding the concurrent writes done by the matrix
+          gh release upload "${GITHUB_REF_NAME}" version.json --clobber
+

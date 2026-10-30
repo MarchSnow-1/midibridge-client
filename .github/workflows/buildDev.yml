@@ -174,3 +174,65 @@ jobs:
         with:
           name: MIDIBridge-Client-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}
           path: MIDIBridge-Client-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}.zip
+
+  manifest:
+    # dev 不发布 Release，清单作为 artifact 上传，平台失败时仍执行，缺失平台记入 warnings
+    #
+    # Dev builds publish no release, so the manifest is uploaded as an artifact, keeps running when a platform fails, and records missing platforms under warnings
+    needs: build
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute version
+        id: version
+        shell: bash
+        run: |
+          RAW=$(git describe --tags --always --long 2>/dev/null || echo "")
+          if echo "$RAW" | grep -Eq '^.+-[0-9]+-g[a-f0-9]+$'; then
+            VER=$(echo "$RAW" | sed -E 's/^(.+)-([0-9]+)-(g[a-f0-9]+)$/\1-beta\2-\3/')
+          elif echo "$RAW" | grep -Eq '^[a-f0-9]+$'; then
+            VER="0.0.0-beta0-g${RAW}"
+          else
+            VER="$RAW"
+          fi
+          echo "VERSION=${VER}" >> "$GITHUB_OUTPUT"
+          echo "Computed version: ${VER}"
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: src/go.mod
+
+      - name: Download platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+          pattern: MIDIBridge-Client-*-*
+
+      - name: Generate version.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -l assets
+          go build -o /tmp/midibridge-client ./src
+          IPC_PROTO="$(/tmp/midibridge-client --ipc-protocol)"
+          python3 .github/scripts/gen_version_manifest.py \
+            --channel dev \
+            --version "${{ steps.version.outputs.VERSION }}" \
+            --ipc-protocol "${IPC_PROTO}" \
+            --assets-dir assets \
+            --out version.json
+          cat version.json
+
+      - name: Upload manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: MIDIBridge-Client-${{ steps.version.outputs.VERSION }}-manifest
+          path: version.json
+
