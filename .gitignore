@@ -3,3 +3,17 @@ dist/
 logs/
 node_modules/
 .dev/
+
+# 示例目录下各语言的构建产物
+# 这些目录由本地编译示例时产生，不应进入版本库
+#
+# Build output of the examples under docs/examples
+# These directories come from compiling an example locally and do not belong in the repository
+docs/examples/**/bin/
+docs/examples/**/obj/
+docs/examples/**/__pycache__/
+docs/examples/**/*.class
+docs/examples/**/consumer
+docs/examples/**/consumer.exe
+docs/examples/**/target/
+docs/examples/**/dist/
