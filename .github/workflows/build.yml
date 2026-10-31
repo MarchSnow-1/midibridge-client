@@ -6,7 +6,14 @@ on:
       - 'v*.*.*'
 
 jobs:
-  changelog:
+  check:
+    # 发布前的一次性检查，包含生成 changelog 与漏洞扫描
+    # 扫描只依赖源码与依赖树，与目标平台无关，因此在这里跑一次而不是在矩阵里跑六次
+    # 任一检查失败都会阻断 build，不产出未扫描的产物
+    #
+    # The one-off checks before a release, covering changelog generation and the vulnerability scan
+    # The scan depends only on the source and the dependency tree, not on the target platform, so it runs once here instead of six times in the matrix
+    # A failure in either check blocks build, so no artifact is produced without a passing scan
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,10 +26,30 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: src/go.mod
+          # 缓存键取 src/go.sum，否则 setup-go 在仓库根找不到依赖文件而跳过缓存
+          #
+          # The cache key reads src/go.sum, otherwise setup-go finds no dependency file at the repository root and skips the cache
+          cache-dependency-path: src/go.sum
+
       - name: Generate release notes
         run: |
           npx auto-changelog-plus --starting-version ${{ github.ref_name }}
           sed -i '1,4d' CHANGELOG.md
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y libasound2-dev gcc g++
+
+      - name: Run govulncheck
+        working-directory: src
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./...
 
       - name: Upload changelog
         uses: actions/upload-artifact@v7
@@ -38,8 +65,8 @@ jobs:
 
   build:
     runs-on: ${{ matrix.os }}
-    needs: changelog
-    if: always() && (needs.changelog.result == 'success' || needs.changelog.result == 'skipped')
+    needs: check
+    if: always() && needs.check.result == 'success'
 
     strategy:
       fail-fast: false
@@ -136,14 +163,6 @@ jobs:
               sudo apt-get install -y libasound2-dev gcc g++
               ;;
           esac
-
-      - name: Vulnerability scan
-        working-directory: src
-        shell: bash
-        run: |
-          set -euo pipefail
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          "$(go env GOPATH)/bin/govulncheck" ./...
 
       - name: Build
         working-directory: src

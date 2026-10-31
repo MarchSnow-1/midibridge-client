@@ -6,7 +6,42 @@ on:
       - main
 
 jobs:
+  check:
+    # 构建前的一次性检查，当前为漏洞扫描
+    # 扫描只依赖源码与依赖树，与目标平台无关，因此在这里跑一次而不是在矩阵里跑六次
+    # 失败会阻断 build，从而不会产出未扫描的产物
+    #
+    # The one-off checks before a build, currently the vulnerability scan
+    # The scan depends only on the source and the dependency tree, not on the target platform, so it runs once here instead of six times in the matrix
+    # A failure blocks build, so no artifact is produced without a passing scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: src/go.mod
+          # 缓存键取 src/go.sum，否则 setup-go 在仓库根找不到依赖文件而跳过缓存
+          #
+          # The cache key reads src/go.sum, otherwise setup-go finds no dependency file at the repository root and skips the cache
+          cache-dependency-path: src/go.sum
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y libasound2-dev gcc g++
+
+      - name: Run govulncheck
+        working-directory: src
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./...
+
   build:
+    needs: check
+    if: always() && needs.check.result == 'success'
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -119,14 +154,6 @@ jobs:
           fi
           echo "VERSION=${VER}" >> "$GITHUB_OUTPUT"
           echo "Computed version: ${VER}"
-
-      - name: Vulnerability scan
-        working-directory: src
-        shell: bash
-        run: |
-          set -euo pipefail
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          "$(go env GOPATH)/bin/govulncheck" ./...
 
       - name: Build
         working-directory: src
