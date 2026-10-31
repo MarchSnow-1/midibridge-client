@@ -24,10 +24,10 @@
 https://github.com/<owner>/<repo>/releases/download/<version>/version.json
 ```
 
-需要跟随最新正式版时，把 `<version>` 换成 `latest`
+需要跟随最新正式版时，用 `releases/latest/download` 这个路径，`latest` 是 release 段的别名而不是 tag 段的别名
 
 ```
-https://github.com/<owner>/<repo>/releases/download/latest/version.json
+https://github.com/<owner>/<repo>/releases/latest/download/version.json
 ```
 
 `latest` 指向最新的正式 Release，标记为 prerelease 或 draft 的发布不会成为 `latest`
@@ -50,7 +50,7 @@ dev 构建不发布 Release，清单作为 Actions run 的 artifact 上传，art
 清单里的 `url` 是含具体 tag 的绝对地址，用它可以锁定与清单同一版本的产物，因此只要顺序正确就不会出现上面两种情况
 
 ```
-1  GET .../releases/download/latest/version.json
+1  GET .../releases/latest/download/version.json
 2  读取 artifacts 数组，按 os 与 arch 选出本平台条目
 3  GET 该条目的 url          ← 地址里已带具体 tag，与第 1 步的清单必然同版本
 4  比对 size 与 sha256
@@ -69,7 +69,7 @@ dev 构建的 `url` 为 `null`，因为 Actions run 的 artifact 没有稳定的
 | `version` | 字符串 | 版本标识原样值，正式发布为 tag 形式如 `v1.3.0`，dev 为 `git describe` 推导值 |
 | `versionSemver` | 字符串 | 去掉 `v` 前缀的版本号，便于做语义化比较 |
 | `ipcProtocol` | 字符串 | ipc 协议版本，与握手帧 `proto` 字段一致 |
-| `ipcProtocolSchema` | 整数 | 描述对应版本的程序所使用的协议的主要版本，跨主要版本代表不向下兼容 |
+| `ipcProtocolSchema` | 整数 | 描述对应版本的程序所使用的协议的主要版本，跨主要版本代表不向下兼容，它就是 `ipcProtocol` 的第一段，例如 `ipcProtocol` 为 `1.0.0` 时本字段为 `1`，为 `2.30.77` 时为 `2`，供读取方先用一个整数判断而无需每次解析字符串 |
 | `commit` | 字符串 | 完整提交哈希，用于追溯来源 |
 | `commitShort` | 字符串 | 短提交哈希，便于人读 |
 | `builtAt` | 整数 | 构建时间的 Unix 时间戳，单位为秒 |
@@ -105,7 +105,7 @@ arm 平台的细分版本写在 `arch` 里，例如 `linux-armv7` 的 `arch` 为
 
 以下条件按顺序判断，任一不满足即表示该版本不适合当前使用方
 
-1. **协议兼容** `ipcProtocol` 的主版本号与使用方期望的一致，主版本不同表示握手帧结构可能已变化
+1. **协议兼容** 先比 `ipcProtocolSchema` 是否与使用方期望的整数相等，相等即表示主版本一致，不相等代表跨主版本因而不向下兼容，两者相等时再按需比对 `ipcProtocol` 的次版本
 2. **平台匹配** `artifacts` 中存在 `os` 与 `arch` 与当前运行环境一致的条目
 3. **版本取舍** 用 `versionSemver` 与本地已装版本做语义化比较，`channel` 为 `dev` 的构建通常只用于测试
 4. **完整性校验** 下载完成后比对 `size` 与 `sha256`，不一致说明传输过程出错、资产被替换，或者两次请求之间发生了新发布，第 3 节说明了如何避免最后一种

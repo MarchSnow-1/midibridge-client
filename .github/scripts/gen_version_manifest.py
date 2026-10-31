@@ -16,14 +16,27 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
-# 协议契约的结构版本，用来让读取方先用一个整数判断能否直接比较协议版本
-# ipcProtocol 是语义化字符串，比较它需要解析三段数字，而这个整数相等即表示协议字段的形态一致
-# 只有在协议相关字段的形态变化时才递增，与 ipcProtocol 自身的语义化版本相互独立
+# ipcProtocolSchema 是 ipcProtocol 的主版本号，由主版本段直接推导而不是手工维护常量
+# 读取方先用这个整数判断主版本是否一致，跨主版本代表不向下兼容，无需每次都解析三段数字
+# 例如 ipcProtocol 为 2.30.77 时这里是 2
 #
-# Structural version of the protocol contract, letting a reader judge comparability with a single integer before comparing versions
-# ipcProtocol is a semantic string whose comparison needs three numeric parts, while equality on this integer already means the protocol fields have the same shape
-# It is bumped only when the shape of the protocol-related fields changes, independent of the semantic version of ipcProtocol itself
-IPC_PROTOCOL_SCHEMA = 1
+# ipcProtocolSchema is the major version of ipcProtocol, derived from the leading segment instead of kept by hand as a constant
+# A reader compares this integer first, since crossing a major version means backward compatibility is not kept and parsing three segments every time is unnecessary
+# A protocol of 2.30.77 therefore yields 2 here
+def ipc_protocol_major(version):
+    """从 ipc 协议版本中取主版本号
+
+    无法解析时返回 0，让读取方看出清单异常而不是当成兼容
+
+    Take the major version out of the ipc protocol version
+
+    An unparsable value returns 0, so a reader sees the manifest is wrong instead of treating it as compatible
+    """
+    head = version.strip().split("+")[0].split("-")[0].split(".")
+    try:
+        return int(head[0])
+    except (IndexError, ValueError):
+        return 0
 
 
 def sha256_of(path):
@@ -191,7 +204,7 @@ def main():
         "version": args.version,
         "versionSemver": version_semver,
         "ipcProtocol": args.ipc_protocol,
-        "ipcProtocolSchema": IPC_PROTOCOL_SCHEMA,
+        "ipcProtocolSchema": ipc_protocol_major(args.ipc_protocol),
         "commit": commit,
         "commitShort": commit[:7] if commit else "",
         "builtAt": int(datetime.now(timezone.utc).timestamp()),

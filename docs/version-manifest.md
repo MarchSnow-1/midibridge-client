@@ -24,10 +24,10 @@ For a release the manifest sits in the asset list of the Release page under the 
 https://github.com/<owner>/<repo>/releases/download/<version>/version.json
 ```
 
-To follow the newest release, replace `<version>` with `latest`
+To follow the newest release, use the `releases/latest/download` path, since `latest` aliases the release segment rather than the tag segment
 
 ```
-https://github.com/<owner>/<repo>/releases/download/latest/version.json
+https://github.com/<owner>/<repo>/releases/latest/download/version.json
 ```
 
 `latest` points at the newest published release, since a release marked as a prerelease or a draft does not become `latest`
@@ -50,7 +50,7 @@ Two problems appear when a new release lands between the two requests
 The `url` field is an absolute address carrying a concrete tag, so it pins the artifact to the same version as the manifest, and a correct sequence avoids both problems
 
 ```
-1  GET .../releases/download/latest/version.json
+1  GET .../releases/latest/download/version.json
 2  read the artifacts array and pick the entry matching os and arch
 3  GET the url of that entry   ← the address already carries a concrete tag, so it matches the manifest from step 1
 4  compare size and sha256
@@ -69,7 +69,7 @@ A dev build has `url` set to `null`, because an Actions run artifact has no stab
 | `version` | string | Version identifier as-is, a tag such as `v1.3.0` for a release and a `git describe` derived value for a dev build |
 | `versionSemver` | string | Version with the `v` prefix removed, for semantic comparison |
 | `ipcProtocol` | string | ipc protocol version, identical to the `proto` field of the handshake frame |
-| `ipcProtocolSchema` | integer | Major version of the protocol used by the program in that release, where crossing a major version means backward compatibility is not kept |
+| `ipcProtocolSchema` | integer | Major version of the protocol used by the program in that release, where crossing a major version means backward compatibility is not kept, and it is the first segment of `ipcProtocol`, so `1.0.0` yields `1` and `2.30.77` yields `2`, letting a reader compare one integer instead of parsing the string every time |
 | `commit` | string | Full commit hash, for tracing the source |
 | `commitShort` | string | Short commit hash, for readability |
 | `builtAt` | integer | Build time as a Unix timestamp in seconds |
@@ -105,7 +105,7 @@ A finer ARM version lives in `arch`, so the arch of `linux-armv7` is `armv7`, an
 
 Evaluate these conditions in order, and treat the version as unsuitable when any of them fails
 
-1. **Protocol is compatible** the major version of `ipcProtocol` matches what the consumer expects, since a different major version means the handshake frame may have changed shape
+1. **Protocol is compatible** compare `ipcProtocolSchema` against the integer the consumer expects, where equality means the major version matches and a difference means the major versions cross so backward compatibility is not kept, and once they match compare the minor part of `ipcProtocol` if needed
 2. **Platform matches** `artifacts` holds an entry whose `os` and `arch` match the current runtime
 3. **Version is acceptable** compare `versionSemver` against the installed version semantically, and note that a build with `channel` set to `dev` is normally meant for testing only
 4. **Integrity holds** after downloading, compare `size` and `sha256`, where a mismatch means a broken transfer, a replaced asset, or a release landing between the two requests, and section 3 describes how to avoid the last one
