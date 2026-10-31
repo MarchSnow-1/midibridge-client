@@ -24,13 +24,43 @@ For a release the manifest sits in the asset list of the Release page under the 
 https://github.com/<owner>/<repo>/releases/download/<version>/version.json
 ```
 
+To follow the newest release, replace `<version>` with `latest`
+
+```
+https://github.com/<owner>/<repo>/releases/download/latest/version.json
+```
+
+`latest` points at the newest published release, since a release marked as a prerelease or a draft does not become `latest`
+
 A dev build publishes no release, so the manifest is uploaded as an Actions run artifact under the fixed name `version.json`, which does not change with the build, and is fetched with `gh run download <run-id> -n version.json` or from that run page
 
 The platform artifacts are bare binary artifacts too, named `MIDIBridge-Client-<version>-<platform>`, with an `.exe` suffix on Windows
 
 The `channel` field distinguishes the two sources, `release` for a published version and `dev` for a development build
 
-## 3. Top-level fields
+## 3. Constraints when using latest
+
+When `latest` drives update detection, the download must go through the `url` of the matching platform entry, rather than assembling a platform filename onto the same `latest` address
+
+Two problems appear when a new release lands between the two requests
+
+- The manifest comes from the old version while the artifact comes from the new one, so `sha256` no longer matches the file and the integrity check fails
+- The new version may change the manifest format or the meaning of a field, and parsing it with the old logic yields a wrong result
+
+The `url` field is an absolute address carrying a concrete tag, so it pins the artifact to the same version as the manifest, and a correct sequence avoids both problems
+
+```
+1  GET .../releases/download/latest/version.json
+2  read the artifacts array and pick the entry matching os and arch
+3  GET the url of that entry   ← the address already carries a concrete tag, so it matches the manifest from step 1
+4  compare size and sha256
+```
+
+To pin a version instead, use a concrete tag in place of `latest`, which locks both requests to the same version
+
+A dev build has `url` set to `null`, because an Actions run artifact has no stable public address, so the artifact is fetched by `filename` from that run
+
+## 4. Top-level fields
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -49,7 +79,7 @@ The `channel` field distinguishes the two sources, `release` for a published ver
 | `artifacts` | array | One entry per platform artifact, see the next section |
 | `warnings` | array | Warnings from generation, such as a missing expected platform |
 
-## 4. Artifact entry fields
+## 5. Artifact entry fields
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -71,16 +101,16 @@ want := runtime.GOOS + "-" + runtime.GOARCH
 
 A finer ARM version lives in `arch`, so the arch of `linux-armv7` is `armv7`, and such a platform needs its own handling when comparing against `GOARCH`
 
-## 5. Deciding whether to install
+## 6. Deciding whether to install
 
 Evaluate these conditions in order, and treat the version as unsuitable when any of them fails
 
 1. **Protocol is compatible** the major version of `ipcProtocol` matches what the consumer expects, since a different major version means the handshake frame may have changed shape
 2. **Platform matches** `artifacts` holds an entry whose `os` and `arch` match the current runtime
 3. **Version is acceptable** compare `versionSemver` against the installed version semantically, and note that a build with `channel` set to `dev` is normally meant for testing only
-4. **Integrity holds** after downloading, compare `size` and `sha256`, where a mismatch means a broken transfer or a replaced asset
+4. **Integrity holds** after downloading, compare `size` and `sha256`, where a mismatch means a broken transfer, a replaced asset, or a release landing between the two requests, and section 3 describes how to avoid the last one
 
-## 6. Relationship to the handshake frame
+## 7. Relationship to the handshake frame
 
 The `ipcProtocol` field and the runtime `proto` field read the same constant, so they cannot disagree with each other
 

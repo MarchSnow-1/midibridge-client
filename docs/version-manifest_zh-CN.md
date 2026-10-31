@@ -24,13 +24,43 @@
 https://github.com/<owner>/<repo>/releases/download/<version>/version.json
 ```
 
+需要跟随最新正式版时，把 `<version>` 换成 `latest`
+
+```
+https://github.com/<owner>/<repo>/releases/download/latest/version.json
+```
+
+`latest` 指向最新的正式 Release，标记为 prerelease 或 draft 的发布不会成为 `latest`
+
 dev 构建不发布 Release，清单作为 Actions run 的 artifact 上传，artifact 名固定为 `version.json`，不随版本号变化，用 `gh run download <run-id> -n version.json` 或从该次运行页面取得
 
 各平台产物同样是裸二进制的 artifact，名为 `MIDIBridge-Client-<version>-<platform>`，Windows 上带 `.exe` 后缀
 
 `channel` 字段区分两种来源，正式发布为 `release`，dev 构建为 `dev`
 
-## 3. 顶层字段
+## 3. 使用 latest 时的约束
+
+用 `latest` 检测更新时，下载必须走清单里该平台条目的 `url`，不要自己在同一个 `latest` 地址上拼平台文件名
+
+原因有两点，都在两次请求之间发生新发布时暴露
+
+- 清单来自旧版本而产物来自新版本，`sha256` 与实际文件对不上，完整性校验失败
+- 新版本可能改变了清单格式或字段含义，按旧逻辑解析新清单会得到错误结果
+
+清单里的 `url` 是含具体 tag 的绝对地址，用它可以锁定与清单同一版本的产物，因此只要顺序正确就不会出现上面两种情况
+
+```
+1  GET .../releases/download/latest/version.json
+2  读取 artifacts 数组，按 os 与 arch 选出本平台条目
+3  GET 该条目的 url          ← 地址里已带具体 tag，与第 1 步的清单必然同版本
+4  比对 size 与 sha256
+```
+
+需要固定版本时直接使用具体 tag 而不是 `latest`，两次请求就都锁定在同一个版本上
+
+dev 构建的 `url` 为 `null`，因为 Actions run 的 artifact 没有稳定的公开地址，这时按 `filename` 从该次运行的 artifact 中取
+
+## 4. 顶层字段
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
@@ -49,7 +79,7 @@ dev 构建不发布 Release，清单作为 Actions run 的 artifact 上传，art
 | `artifacts` | 数组 | 各平台产物的条目，见下一节 |
 | `warnings` | 数组 | 生成时的告警，例如缺少某个预期平台 |
 
-## 4. artifacts 条目字段
+## 5. artifacts 条目字段
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
@@ -71,16 +101,16 @@ want := runtime.GOOS + "-" + runtime.GOARCH
 
 arm 平台的细分版本写在 `arch` 里，例如 `linux-armv7` 的 `arch` 为 `armv7`，因此按 `GOARCH` 比对时需要单独处理这类平台
 
-## 5. 判断是否安装
+## 6. 判断是否安装
 
 以下条件按顺序判断，任一不满足即表示该版本不适合当前使用方
 
 1. **协议兼容** `ipcProtocol` 的主版本号与使用方期望的一致，主版本不同表示握手帧结构可能已变化
 2. **平台匹配** `artifacts` 中存在 `os` 与 `arch` 与当前运行环境一致的条目
 3. **版本取舍** 用 `versionSemver` 与本地已装版本做语义化比较，`channel` 为 `dev` 的构建通常只用于测试
-4. **完整性校验** 下载完成后比对 `size` 与 `sha256`，不一致说明传输过程出错或资产被替换
+4. **完整性校验** 下载完成后比对 `size` 与 `sha256`，不一致说明传输过程出错、资产被替换，或者两次请求之间发生了新发布，第 3 节说明了如何避免最后一种
 
-## 6. 与握手帧的关系
+## 7. 与握手帧的关系
 
 清单中的 `ipcProtocol` 与运行期握手帧的 `proto` 字段取自同一常量，因此两者不会出现不一致
 
