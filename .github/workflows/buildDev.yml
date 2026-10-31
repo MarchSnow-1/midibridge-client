@@ -215,12 +215,18 @@ jobs:
           merge-multiple: true
           pattern: MIDIBridge-Client-*-*
 
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y libasound2-dev gcc g++
+
       - name: Generate version.json
         shell: bash
         run: |
           set -euo pipefail
           ls -l assets
-          go build -o /tmp/midibridge-client ./src
+          export CGO_ENABLED=1
+          (cd src && go build -o /tmp/midibridge-client .)
           IPC_PROTO="$(/tmp/midibridge-client --ipc-protocol)"
           python3 .github/scripts/gen_version_manifest.py \
             --channel dev \
