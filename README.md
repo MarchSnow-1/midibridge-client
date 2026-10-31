@@ -23,14 +23,14 @@ Receive MIDI signals from MIDIBridge Server over the network and inject them int
 
 ### Requirements
 
-None for the prebuilt binary — just download and run. Go ≥ 1.26 is only needed if you [build from source](#build-from-source).
+None for the prebuilt binary — just download and run. Go ≥ 1.27.3 is only needed if you [build from source](#build-from-source).
 
 > [!IMPORTANT]
 > Windows MM API does not support programmatic virtual MIDI port creation.<br>
 > Install [loopMIDI](https://www.tobias-erichsen.de/software/loopmidi.html) first and create a virtual port — the name must match `midi.virtualPortName` in your config.
 
 
-Download the binary for your platform from [Releases](https://github.com/MarchSnow-1/midibridge-client/releases), extract and run:
+Download the binary for your platform from [Releases](https://github.com/MarchSnow-1/midibridge-client/releases) and run it:
 
 ```bash
 ./midibridge-client
@@ -182,7 +182,7 @@ Higher priority overrides lower:
 ./midibridge-client --host 192.168.1.100 --port 9001 --password mypass --port-name "My Bridge" --lang zh-CN
 ```
 
-`--version` / `-v` prints the client version and exits.
+`--version` / `-v` prints the client version together with the ipc protocol version and exits, while `--ipc-protocol` prints the ipc protocol version alone on one line for scripts to read
 
 > [!WARNING]
 > Passing the password via `--password` exposes it in the process list and shell history. Prefer `data/config.json` — see [Security](#security).
@@ -220,7 +220,7 @@ The bind address is your choice: a loopback address keeps the stream reachable f
 
 Interface characteristics:
 
-- **Read-only.** The client never reads from IPC consumers; it only writes the MIDI stream.
+- **Read-only.** The client does not read from IPC consumers; it only writes the MIDI stream.
 - **No authentication.** Any process that can reach the port may connect, so binding a non-loopback address makes the client log a warning and mark the listener line accordingly.
 - **Plaintext.** Under a loopback bind traffic stays on the machine; handle confidentiality at a lower layer for anything crossing a network.
 - **No delivery guarantee.** A consumer that falls behind drops frames; see the protocol document for details.
@@ -242,7 +242,7 @@ Full protocol specification and all examples: [`docs/PROTOCOL.md`](docs/PROTOCOL
 
 Every release and dev build also ships a `version.json` manifest
 
-It lists the program version, the ipc protocol version, and the size and SHA-256 of each platform archive, so a program can decide whether to install a build without downloading it first
+It lists the program version, the ipc protocol version, and the size and SHA-256 of each platform binary, so a program can decide whether to install a build without downloading it first
 
 Field reference and decision rules: [`docs/version-manifest.md`](docs/version-manifest.md)
 
@@ -285,7 +285,7 @@ Put the server's certificate (or the CA certificate that signed it) at the confi
 
 | Dependency | Notes |
 |------------|-------|
-| Go | ≥ 1.26 |
+| Go | ≥ 1.27.3 |
 | GCC | Required for CGO (RtMidi linking) |
 
 ### Build & Run

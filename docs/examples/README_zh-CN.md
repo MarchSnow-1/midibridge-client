@@ -69,8 +69,7 @@ cd go
 go run main.go
 ```
 
-`main.go` 只导入标准库，因此在任意目录下 `go run` 都可运行。要构建二进制：
-`go build -o consumer main.go`
+`main.go` 只导入标准库，因此在任意目录下 `go run` 都可运行，要构建二进制可用 `go build -o consumer main.go`
 
 ### C++
 

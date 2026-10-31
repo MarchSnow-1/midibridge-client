@@ -23,14 +23,14 @@
 
 ### 环境要求
 
-运行预编译二进制无任何依赖，下载即用。仅从源码构建时需要 Go ≥ 1.26（见[从源码构建](#从源码构建)）。
+运行预编译二进制无任何依赖，下载即用。仅从源码构建时需要 Go ≥ 1.27.3（见[从源码构建](#从源码构建)）。
 
 > [!IMPORTANT]
 > Windows 的 MM API 不支持程序化创建虚拟 MIDI 端口<br>
 > 请先安装 [loopMIDI](https://www.tobias-erichsen.de/software/loopmidi.html) 并创建一个虚拟端口，名称需与配置中的 `midi.virtualPortName` 一致
 
 
-从 [Releases](https://github.com/MarchSnow-1/midibridge-client/releases) 下载对应平台的二进制，解压后直接运行：
+从 [Releases](https://github.com/MarchSnow-1/midibridge-client/releases) 下载对应平台的二进制，直接运行：
 
 ```bash
 ./midibridge-client
@@ -101,8 +101,7 @@
 
 macOS / Linux 下虚拟端口会自动创建。Windows 下需先在 loopMIDI 中创建同名端口
 
-端口名匹配为子串匹配而非精确匹配：客户端使用第一个名称**包含** `virtualPortName` 的输出端口（`strings.Contains`）
-例如配置为 `"Bridge"` 时，可匹配 `"MIDIBridge"` 或 `"My Bridge"` 端口
+端口名匹配为子串匹配而非精确匹配：客户端使用第一个名称**包含** `virtualPortName` 的输出端口（`strings.Contains`），例如配置为 `"Bridge"` 时可匹配 `"MIDIBridge"` 或 `"My Bridge"` 端口
 
 **断线重连：**
 
@@ -183,7 +182,7 @@ macOS / Linux 下虚拟端口会自动创建。Windows 下需先在 loopMIDI 中
 ./midibridge-client --host 192.168.1.100 --port 9001 --password 你的密码 --port-name "你的端口名" --lang zh-CN
 ```
 
-`--version` / `-v` 打印客户端版本号并退出。
+`--version` / `-v` 打印客户端版本号与 ipc 协议版本并退出，`--ipc-protocol` 只打印 ipc 协议版本单行，便于脚本取值
 
 > [!WARNING]
 > 通过 `--password` 传递密码会暴露在进程列表与 shell 历史中，建议使用 `data/config.json`。详见[安全说明](#安全说明)。
@@ -223,7 +222,7 @@ midibridge-client -ipc-listen 127.0.0.1:9003 -midi=false
 
 接口特性：
 
-- **只读** 客户端从不读取接入方的数据，只单向写出 MIDI 流
+- **只读** 客户端不读取接入方的数据，只单向写出 MIDI 流
 - **无鉴权** 能访问到端口的进程均可连接，因此绑定非回环地址时客户端会记录警告并在监听日志中标注
 - **明文** 回环绑定下流量不出本机，跨网络传输的机密性需要在下层自行处理
 - **不保证投递** 消费过慢会丢帧，详见协议文档
@@ -245,7 +244,7 @@ midibridge-client -ipc-listen 127.0.0.1:9003 -midi=false
 
 每次发布与每次 dev 构建还会附带一份 `version.json` 清单
 
-其中列出了程序版本、ipc 协议版本以及各平台压缩包的大小与 SHA-256，使外部程序无需下载即可判断是否安装某个构建
+其中列出了程序版本、ipc 协议版本以及各平台二进制产物的大小与 SHA-256，使外部程序无需下载即可判断是否安装某个构建
 
 字段说明与判断规则见 [`docs/version-manifest_zh-CN.md`](docs/version-manifest_zh-CN.md)
 
@@ -288,7 +287,7 @@ midibridge-client -ipc-listen 127.0.0.1:9003 -midi=false
 
 | 依赖 | 说明 |
 |------|------|
-| Go | ≥ 1.26 |
+| Go | ≥ 1.27.3 |
 | GCC | CGO 编译 RtMidi 所需 |
 
 ### 构建与运行

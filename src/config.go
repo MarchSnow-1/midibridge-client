@@ -141,7 +141,7 @@ func loadConfig(configPath string) (*ClientConfig, error) {
 	flag.IntVar(&cfg.Server.Port, "port", cfg.Server.Port, "Server port")
 	flag.StringVar(&cfg.Auth.Password, "password", cfg.Auth.Password, "Auth password")
 	flag.StringVar(&cfg.MIDI.VirtualPortName, "port-name", cfg.MIDI.VirtualPortName, "Virtual MIDI port name")
-	flag.StringVar(&cfg.IPC.Listen, "ipc-listen", cfg.IPC.Listen, "Expose the MIDI stream to local processes over TCP (loopback only, e.g. 127.0.0.1:9003; empty disables)")
+	flag.StringVar(&cfg.IPC.Listen, "ipc-listen", cfg.IPC.Listen, "Expose the MIDI stream to other processes over TCP, e.g. 127.0.0.1:9003 or 0.0.0.0:9003; empty disables")
 	flag.BoolVar(&cfg.MIDI.Enabled, "midi", cfg.MIDI.Enabled, "Initialize the virtual MIDI output port (disable for IPC-only mode)")
 	flag.Parse()
 

@@ -229,7 +229,7 @@ midi   : F0 7E 7F 06 01 F7
 read: connection closed
 ```
 
-`version` 的值是 client 构建版本，开发构建会打印 `dev` 而不是发布版本号
+`version` 的值是 client 构建时注入的版本号，正式发布为 tag 值，dev 流水线为 `git describe` 推导值，源码直接 `go build` 未注入时为 `dev`
 
 上面的控制帧按 client 实际发送的字段顺序原样列出，把控制帧解码成对象的示例可能以不同顺序打印键，JSON 键顺序没有保证，请按对象解析控制帧，不要做文本匹配
 

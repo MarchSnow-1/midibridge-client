@@ -229,7 +229,7 @@ midi   : F0 7E 7F 06 01 F7
 read: connection closed
 ```
 
-The `version` value is the client build version, so a development build prints `dev` rather than a release number
+The `version` value is the client build version injected at build time, a tag for a release, a `git describe` derived value for a dev pipeline build, and `dev` when built from source without the injection
 
 The control frame above is listed in the field order the client actually emits; an example that decodes it into an object may print the keys in a different order, and JSON key order is not guaranteed, so parse the control frame as an object rather than matching text
 
