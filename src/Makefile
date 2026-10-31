@@ -18,6 +18,7 @@ endif
 LDFLAGS := $(strip -X main.version=$(VERSION) $(EXTLDFLAGS))
 
 build:
+	@mkdir -p ../dist
 	CGO_ENABLED=1 go build -ldflags "$(LDFLAGS)" -o $(BIN) .
 
 version:
