@@ -71,6 +71,8 @@ go run main.go
 
 `main.go` 只导入标准库，因此在任意目录下 `go run` 都可运行，要构建二进制可用 `go build -o consumer main.go`
 
+与其他示例不同，Go 的地址是一个 `host:port` 参数而不是分开的两个：`go run main.go 127.0.0.1:9004`
+
 ### C++
 
 示例是符合标准的 C++17 代码，任何合规编译器都能构建，Windows 上必须带 `-lws2_32`，因为示例使用 Winsock2，不加会报 `WSAStartup`、`closesocket` 等符号未解析

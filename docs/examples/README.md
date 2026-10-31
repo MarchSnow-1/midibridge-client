@@ -70,6 +70,8 @@ go run main.go
 
 `main.go` imports only the standard library, so `go run` works from any directory, and a binary can be built with `go build -o consumer main.go`
 
+Unlike the other examples, the address is one `host:port` argument rather than two separate ones: `go run main.go 127.0.0.1:9004`
+
 ### C++
 
 The example is standard C++17 and builds with any conforming compiler, while Windows needs `-lws2_32` because the example uses Winsock2, without which `WSAStartup`, `closesocket` and friends stay unresolved
