@@ -55,24 +55,39 @@ def git_value(args, default=""):
         return default
 
 
+EXPECTED_PLATFORMS = [
+    "windows-amd64",
+    "linux-amd64",
+    "linux-arm64",
+    "linux-armv7",
+    "darwin-amd64",
+    "darwin-arm64",
+]
+
+
 def parse_platform(filename, version):
     """从产物文件名中解析平台名
 
-    文件名形如 MIDIBridge-Client-<version>-<platform>.zip
+    文件名形如 MIDIBridge-Client-<version>-<platform>，Windows 上带 .exe 后缀
+    平台名按已知列表匹配而不是按点号切分，因为版本号本身可能含有点号
     解析失败时返回 None，由调用方记录为未知平台
 
     Parse the platform name out of an artifact filename
 
-    The name looks like MIDIBridge-Client-<version>-<platform>.zip
+    The name looks like MIDIBridge-Client-<version>-<platform>, with an .exe suffix on Windows
+    The platform is matched against the known list instead of splitting on dots, since a version string may contain dots
     A parse failure returns None and the caller records it as an unknown platform
     """
     prefix = "MIDIBridge-Client-%s-" % version
-    if not filename.startswith(prefix) or not filename.endswith(".zip"):
+    if not filename.startswith(prefix):
         return None
-    return filename[len(prefix):-len(".zip")]
+    rest = filename[len(prefix):]
+    if rest.endswith(".exe"):
+        rest = rest[:-len(".exe")]
+    return rest or None
 
 
-def build_artifact(path, version, base_url, download_base):
+def build_artifact(path, version, download_base):
     """构造单个平台条目
 
     Build one platform entry
@@ -105,7 +120,6 @@ def build_artifact(path, version, base_url, download_base):
         "platform": platform or "",
         "os": os_name,
         "arch": arch,
-        "archive": "zip",
         "filename": filename,
         "size": os.path.getsize(path),
         "sha256": sha256_of(path),
@@ -137,8 +151,12 @@ def main():
 
     artifacts = []
     warnings = []
+    prefix = "MIDIBridge-Client-%s-" % args.version
     for name in sorted(os.listdir(args.assets_dir)):
-        if not name.endswith(".zip"):
+        # 产物是裸二进制，没有统一后缀，因此按文件名前缀识别，Windows 上带 .exe
+        #
+        # Artifacts are bare binaries without a shared suffix, so they are recognised by filename prefix, with .exe on Windows
+        if not name.startswith(prefix):
             continue
         path = os.path.join(args.assets_dir, name)
         if not os.path.isfile(path):
@@ -152,7 +170,7 @@ def main():
             # Dev builds exist only as Actions run artifacts and have no stable public URL
             # The url is therefore left empty so external programs use the run page, avoiding a link that expires
             download_base = ""
-        artifact = build_artifact(path, args.version, args.assets_dir, download_base)
+        artifact = build_artifact(path, args.version, download_base)
         if not artifact["platform"]:
             warnings.append("unrecognised artifact name: %s" % name)
         artifacts.append(artifact)
@@ -161,16 +179,8 @@ def main():
         print("no artifacts found in %s" % args.assets_dir, file=sys.stderr)
         return 1
 
-    expected = [
-        "windows-amd64",
-        "linux-amd64",
-        "linux-arm64",
-        "linux-armv7",
-        "darwin-amd64",
-        "darwin-arm64",
-    ]
     found = {item["platform"] for item in artifacts}
-    for platform in expected:
+    for platform in EXPECTED_PLATFORMS:
         if platform not in found:
             warnings.append("missing expected platform: %s" % platform)
 

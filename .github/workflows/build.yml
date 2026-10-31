@@ -25,10 +25,16 @@ jobs:
           sed -i '1,4d' CHANGELOG.md
 
       - name: Upload changelog
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: changelog
+          # archive 为 false 时 artifact 名取自文件名，因此下游按 CHANGELOG.md 下载
+          # 文件缺失说明 changelog 生成失败，直接报错而不是让后续每个平台各自失败
+          #
+          # With archive false the artifact name comes from the filename, so downstream downloads it as CHANGELOG.md
+          # A missing file means changelog generation failed, so fail here instead of failing later in every platform job
           path: CHANGELOG.md
+          archive: false
+          if-no-files-found: error
 
   build:
     runs-on: ${{ matrix.os }}
@@ -163,33 +169,16 @@ jobs:
           mv dist/midibridge-client${{ matrix.ext }} \
              dist/MIDIBridge-Client-${{ github.ref_name }}-${{ matrix.platform }}${{ matrix.ext }}
 
-      - name: Package (Linux / macOS)
-        if: runner.os != 'Windows'
-        run: |
-          mkdir -p release/data
-          cp dist/MIDIBridge-Client-${{ github.ref_name }}-${{ matrix.platform }}${{ matrix.ext }} release/
-          cd release && zip -r \
-            ../MIDIBridge-Client-${{ github.ref_name }}-${{ matrix.platform }}.zip .
-
-      - name: Package (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path release\data | Out-Null
-          Copy-Item "dist\MIDIBridge-Client-${{ github.ref_name }}-${{ matrix.platform }}${{ matrix.ext }}" release\
-          Compress-Archive -Path release\* `
-            -DestinationPath "MIDIBridge-Client-${{ github.ref_name }}-${{ matrix.platform }}.zip"
-
       - name: Download changelog
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
-          name: changelog
+          name: CHANGELOG.md
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
           body_path: CHANGELOG.md
-          files: MIDIBridge-Client-${{ github.ref_name }}-${{ matrix.platform }}.zip
+          files: dist/MIDIBridge-Client-${{ github.ref_name }}-${{ matrix.platform }}${{ matrix.ext }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -221,7 +210,10 @@ jobs:
             echo "::error::release ${GITHUB_REF_NAME} not found; manifest cannot be generated"
             exit 1
           fi
-          gh release download "${GITHUB_REF_NAME}" --pattern '*.zip' --dir assets
+          # 产物是裸二进制，Windows 带 .exe 其他平台无后缀，因此按文件名前缀下载而不是按后缀
+          #
+          # Artifacts are bare binaries with .exe only on Windows, so they are fetched by filename prefix rather than by suffix
+          gh release download "${GITHUB_REF_NAME}" --pattern 'MIDIBridge-Client-*' --dir assets
           ls -l assets
 
       - name: Install build dependencies

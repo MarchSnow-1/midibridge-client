@@ -10,7 +10,7 @@
 
 每次发布与每次 dev 构建都会生成一份 `version.json`，内容为当前构建的全部平台产物及其校验信息
 
-外部程序读取这份清单即可回答三个问题，无需下载压缩包
+外部程序读取这份清单即可回答三个问题，无需下载产物本体
 
 - 这个版本的程序版本号与 ipc 协议版本是否兼容
 - 有没有适合我当前平台与架构的产物
@@ -24,7 +24,9 @@
 https://github.com/<owner>/<repo>/releases/download/<version>/version.json
 ```
 
-清单与各平台压缩包一起作为 Actions run 的 artifact 上传，需要从该次运行的页面下载
+dev 构建不发布 Release，清单作为 Actions run 的 artifact 上传，artifact 名固定为 `version.json`，不随版本号变化，用 `gh run download <run-id> -n version.json` 或从该次运行页面取得
+
+各平台产物同样是裸二进制的 artifact，名为 `MIDIBridge-Client-<version>-<platform>`，Windows 上带 `.exe` 后缀
 
 `channel` 字段区分两种来源，正式发布为 `release`，dev 构建为 `dev`
 
@@ -51,10 +53,9 @@ https://github.com/<owner>/<repo>/releases/download/<version>/version.json
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
-| `platform` | 字符串 | 平台标识，与压缩包文件名中的平台段一致 |
+| `platform` | 字符串 | 平台标识，与产物文件名中的平台段一致 |
 | `os` | 字符串 | 平台标识中横线之前的部分，对应 Go 的 `GOOS`，无法解析时为空串 |
 | `arch` | 字符串 | 平台标识中横线之后的部分，对应 Go 的 `GOARCH`，armv7 一类细分也完整保留在此字段，无法解析时为空串 |
-| `archive` | 字符串 | 压缩格式，当前固定为 `zip` |
 | `filename` | 字符串 | 资产文件名 |
 | `size` | 整数 | 文件字节数，可用于下载前预估空间 |
 | `sha256` | 字符串 | 文件的小写十六进制 SHA-256，用于下载后校验 |

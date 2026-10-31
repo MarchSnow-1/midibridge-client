@@ -152,28 +152,17 @@ jobs:
           mv dist/midibridge-client${{ matrix.ext }} \
              dist/MIDIBridge-Client-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}${{ matrix.ext }}
 
-      - name: Package (Linux / macOS)
-        if: runner.os != 'Windows'
-        run: |
-          mkdir -p release/data
-          cp dist/MIDIBridge-Client-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}${{ matrix.ext }} release/
-          cd release && zip -r \
-            ../MIDIBridge-Client-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}.zip .
-
-      - name: Package (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path release\data | Out-Null
-          Copy-Item "dist\MIDIBridge-Client-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}${{ matrix.ext }}" release\
-          Compress-Archive -Path release\* `
-            -DestinationPath "MIDIBridge-Client-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}.zip"
-
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: MIDIBridge-Client-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}
-          path: MIDIBridge-Client-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}.zip
+          # 直传裸二进制，archive 为 false 时 artifact 名取自文件名，忽略 name
+          # 因此下游按 MIDIBridge-Client-<version>-<platform> 取到的就是可执行文件本身，没有额外的 zip 层
+          #
+          # Upload the bare binary directly, since archive false takes the artifact name from the filename and ignores name
+          # A downstream fetch of MIDIBridge-Client-<version>-<platform> therefore yields the executable itself without an extra zip layer
+          path: dist/MIDIBridge-Client-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}${{ matrix.ext }}
+          archive: false
+          if-no-files-found: error
 
   manifest:
     # dev 不发布 Release，清单作为 artifact 上传，平台失败时仍执行，缺失平台记入 warnings
@@ -209,7 +198,7 @@ jobs:
           go-version-file: src/go.mod
 
       - name: Download platform artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: assets
           merge-multiple: true
@@ -237,8 +226,15 @@ jobs:
           cat version.json
 
       - name: Upload manifest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: MIDIBridge-Client-${{ steps.version.outputs.VERSION }}-manifest
+          # artifact 名取自文件名，即 version.json，固定不随版本号变化
+          # 直传让下游从 run 页面拿到的就是 JSON 本身，不用再解一层 zip
+          #
+          # The artifact name comes from the filename, so it is the fixed version.json rather than one that changes with the build
+          # Uploading directly gives downstream a bare JSON from the run page instead of another zip to unwrap
           path: version.json
+          archive: false
+          overwrite: true
+          if-no-files-found: error
 

@@ -10,7 +10,7 @@ This document describes the `version.json` shipped with every build, which lets 
 
 Each release and each dev build produces a `version.json` listing every platform artifact of that build together with its integrity data
 
-An external program that reads this manifest can answer three questions without downloading an archive
+An external program that reads this manifest can answer three questions without downloading the artifacts themselves
 
 - whether the program version and the ipc protocol version are compatible
 - whether an artifact exists for the platform and architecture it runs on
@@ -24,7 +24,9 @@ For a release the manifest sits in the asset list of the Release page under the 
 https://github.com/<owner>/<repo>/releases/download/<version>/version.json
 ```
 
-The manifest is uploaded as an Actions run artifact alongside the platform archives, so it has to be fetched from that run page
+A dev build publishes no release, so the manifest is uploaded as an Actions run artifact under the fixed name `version.json`, which does not change with the build, and is fetched with `gh run download <run-id> -n version.json` or from that run page
+
+The platform artifacts are bare binary artifacts too, named `MIDIBridge-Client-<version>-<platform>`, with an `.exe` suffix on Windows
 
 The `channel` field distinguishes the two sources, `release` for a published version and `dev` for a development build
 
@@ -51,10 +53,9 @@ The `channel` field distinguishes the two sources, `release` for a published ver
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `platform` | string | Platform identifier, matching the platform segment of the archive filename |
+| `platform` | string | Platform identifier, matching the platform segment of the artifact filename |
 | `os` | string | The part before the hyphen in the platform identifier, matching the Go `GOOS`, empty when unparsable |
 | `arch` | string | The part after the hyphen, matching the Go `GOARCH`, keeping a finer value such as armv7 as-is, empty when unparsable |
-| `archive` | string | Archive format, currently `zip` |
 | `filename` | string | Asset filename |
 | `size` | integer | File size in bytes, useful for estimating space before downloading |
 | `sha256` | string | Lowercase hex SHA-256 of the file, for verifying a download |
